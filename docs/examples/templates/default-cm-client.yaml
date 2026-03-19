@@ -1,0 +1,58 @@
+# Шаблон: ConfigMap[client] — "parameters-client"
+# Используется в: spec.configMapTemplateRef.client.name
+# Создаётся В REMOTE (infra) КЛАСТЕРЕ
+# metadata.name ("parameters-client") и metadata.namespace ("beget-system") задаёт оператор
+# Контекст: .ClusterClaim + .InfraControlPlaneEndpoint + .InfraControlPlaneReplicas (Step 9)
+apiVersion: clusterclaim.in-cloud.io/v1alpha1
+kind: ClusterClaimObserveResourceTemplate
+metadata:
+  name: default-cm-client
+spec:
+  value: |
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      labels:
+        xcluster.in-cloud.io/name: {{ .ClusterClaim.metadata.name }}
+    data:
+      environment: client
+      xcluster: {{ .ClusterClaim.metadata.name }}
+      customer: {{ .ClusterClaim.metadata.namespace }}
+      systemNamespace: {{ .ClusterClaim.metadata.namespace }}
+
+      clusterName: {{ .ClusterClaim.metadata.name }}-client
+      clusterHost: {{ .InfraControlPlaneEndpoint.host }}
+      clusterPort: "{{ .ClusterClaim.spec.client.network.kubeApiserverPort }}"
+      controlPlaneReplicas: "{{ .InfraControlPlaneReplicas }}"
+
+      clusterClientEnabled: "{{ .ClusterClaim.spec.client.enabled }}"
+      clusterClientName: {{ .ClusterClaim.metadata.name }}-client
+      clusterClientPort: "{{ .ClusterClaim.spec.client.network.kubeApiserverPort }}"
+      clusterClientReady: "false"
+      clientVersion: {{ .ClusterClaim.spec.client.componentVersions.kubernetes.version }}
+      clientClusterDomain: cluster.local
+
+      ServiceCidr: {{ .ClusterClaim.spec.client.network.serviceCidr }}
+      clientServiceCidr: {{ .ClusterClaim.spec.client.network.serviceCidr }}
+      podCidr: {{ .ClusterClaim.spec.client.network.podCidr }}
+      podCidrMaskSize: "{{ .ClusterClaim.spec.client.network.podCidrMaskSize }}"
+
+      argocdDestinationName: {{ .ClusterClaim.metadata.name }}-client
+      argocdDestinationNamespace: beget-argocd
+      trackingID: {{ .ClusterClaim.metadata.namespace }}_{{ .ClusterClaim.metadata.name }}:argoproj.io/Application:{{ .ClusterClaim.metadata.namespace }}/{{ .ClusterClaim.metadata.name }}
+
+      systemEnabled: "{{ hasPrefix "system" .ClusterClaim.spec.infra.role }}"
+
+      argocdServerAdminPassword: {{ .ClusterClaim.spec.extraEnvs.argocdServerAdminPassword }}
+      dexStaticClientsApiserver: {{ .ClusterClaim.spec.extraEnvs.dexStaticClientsApiserver }}
+      dexStaticPasswordsAdmin: {{ .ClusterClaim.spec.extraEnvs.dexStaticPasswordsAdmin }}
+      grafanaConfigAdminPassword: {{ .ClusterClaim.spec.extraEnvs.grafanaConfigAdminPassword }}
+      grafanaConfigAdminUser: {{ .ClusterClaim.spec.extraEnvs.grafanaConfigAdminUser }}
+      grafanaDeploymentEnvOidcSecret: {{ .ClusterClaim.spec.extraEnvs.grafanaDeploymentEnvOidcSecret }}
+      incloudUICookieSecret: {{ .ClusterClaim.spec.extraEnvs.incloudUICookieSecret }}
+      etcdbackupAppArgsStorecontainer: {{ .ClusterClaim.spec.extraEnvs.etcdbackupAppArgsStorecontainer }}
+      etcdbackupS3AccessKey: {{ .ClusterClaim.spec.extraEnvs.etcdbackupS3AccessKey }}
+      etcdbackupS3SecretAccessKey: {{ .ClusterClaim.spec.extraEnvs.etcdbackupS3SecretAccessKey }}
+      etcdbackupS3SecretEndpoint: {{ .ClusterClaim.spec.extraEnvs.etcdbackupS3SecretEndpoint }}
+      systemIstioGwVip: {{ .ClusterClaim.spec.extraEnvs.systemIstioGwVip | default "" }}
+      systemVmInsertVIP: {{ .ClusterClaim.spec.extraEnvs.systemVmInsertVIP | default "" }}

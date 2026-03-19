@@ -1,0 +1,104 @@
+# Шаблон: CcmCsrc
+# Используется в: spec.ccmCsrTemplateRef.name
+# Оператор задаёт: metadata.name = {claim.name}, metadata.namespace = {claim.namespace}
+# Контекст:
+#   Step 8 (первый рендер):  .ClientControlPlaneInitialized = false  → client enabled=false
+#   Step 12 (повторный рендер): .ClientControlPlaneInitialized = true → client enabled=true
+apiVersion: clusterclaim.in-cloud.io/v1alpha1
+kind: ClusterClaimObserveResourceTemplate
+metadata:
+  name: default-ccm
+spec:
+  value: |
+    apiVersion: controller.in-cloud.io/v1alpha1
+    kind: CcmCsrc
+    metadata:
+      labels:
+        xcluster.in-cloud.io/name: {{ .ClusterClaim.metadata.name }}
+    spec:
+      beget-ccm:
+        appSpec:
+          applications:
+            ccmInfra:
+              enabled: true
+              containers:
+                manager:
+                  extraEnv:
+                    CLUSTER_NAME: {{ .ClusterClaim.metadata.name }}-infra
+                    CLUSTER_NAMESPACE: {{ .ClusterClaim.metadata.namespace }}
+                    CUSTOMER_LOGIN: {{ .ClusterClaim.metadata.namespace }}
+                    PARENT_CLUSTER_NAME: {{ .ClusterClaim.metadata.name }}
+                  image:
+                    repository: registry.beget.ru/k8s-charts-public/capi-ccm
+                    tag: v1.0.3
+              imagePullSecrets: []
+              volumes:
+                secret-ccm-kubeconfig:
+                  volume:
+                    items:
+                    - key: value
+                      path: kubeconfig
+                    mode: secret
+                    secretName: {{ .ClusterClaim.metadata.name }}-infra-kubeconfig
+            ccmClient:
+              enabled: {{ .ClientControlPlaneInitialized }}
+              containers:
+                manager:
+                  extraEnv:
+                    CLUSTER_NAME: {{ .ClusterClaim.metadata.name }}-client
+                    CLUSTER_NAMESPACE: {{ .ClusterClaim.metadata.namespace }}
+                    CUSTOMER_LOGIN: {{ .ClusterClaim.metadata.namespace }}
+                    PARENT_CLUSTER_NAME: {{ .ClusterClaim.metadata.name }}
+                  image:
+                    repository: registry.beget.ru/k8s-charts-public/capi-ccm
+                    tag: v1.0.3
+              imagePullSecrets: []
+              volumes:
+                secret-ccm-kubeconfig:
+                  volume:
+                    items:
+                    - key: value
+                      path: kubeconfig
+                    mode: secret
+                    secretName: {{ .ClusterClaim.metadata.name }}-client-kubeconfig
+      beget-csrc:
+        appSpec:
+          applications:
+            csrcInfra:
+              enabled: true
+              containers:
+                manager:
+                  extraArgs:
+                    cluster-name: {{ .ClusterClaim.metadata.name }}-infra
+                    cluster-namespace: {{ .ClusterClaim.metadata.namespace }}
+                  image:
+                    repository: registry.beget.ru/k8s-charts-public/capi-csr-approver
+                    tag: v1.0.3
+              imagePullSecrets: []
+              volumes:
+                secret-ccm-kubeconfig:
+                  volume:
+                    items:
+                    - key: value
+                      path: kubeconfig
+                    mode: secret
+                    secretName: {{ .ClusterClaim.metadata.name }}-infra-kubeconfig
+            csrcClient:
+              enabled: {{ .ClientControlPlaneInitialized }}
+              containers:
+                manager:
+                  extraArgs:
+                    cluster-name: {{ .ClusterClaim.metadata.name }}-client
+                    cluster-namespace: {{ .ClusterClaim.metadata.namespace }}
+                  image:
+                    repository: registry.beget.ru/k8s-charts-public/capi-csr-approver
+                    tag: v1.0.3
+              imagePullSecrets: []
+              volumes:
+                secret-ccm-kubeconfig:
+                  volume:
+                    items:
+                    - key: value
+                      path: kubeconfig
+                    mode: secret
+                    secretName: {{ .ClusterClaim.metadata.name }}-client-kubeconfig

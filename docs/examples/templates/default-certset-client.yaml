@@ -1,0 +1,30 @@
+# Шаблон: CertificateSet[client]
+# Используется в: spec.certificateSetTemplateRef.client.name
+# Оператор задаёт: metadata.name = {claim.name}-client, metadata.namespace = {claim.namespace}
+# Контекст: .ClusterClaim + .InfraControlPlaneEndpoint (Step 6, после Cluster[infra] provisioned)
+apiVersion: clusterclaim.in-cloud.io/v1alpha1
+kind: ClusterClaimObserveResourceTemplate
+metadata:
+  name: default-certset-client
+spec:
+  value: |
+    apiVersion: in-cloud.io/v1alpha1
+    kind: CertificateSet
+    metadata:
+      annotations:
+        secret-copy.in-cloud.io/dstClusterKubeconfig: {{ .ClusterClaim.metadata.namespace }}/{{ .ClusterClaim.metadata.name }}-infra-kubeconfig
+        secret-copy.in-cloud.io/dstNamespace: beget-system
+        strategy.secret-copy.in-cloud.io/ifExist: overwrite
+      labels:
+        cluster.x-k8s.io/cluster-name: {{ .ClusterClaim.metadata.name }}-client
+        clusterctl.cluster.x-k8s.io/move: "true"
+        secret-copy.in-cloud.io: "true"
+        xcluster.in-cloud.io/name: {{ .ClusterClaim.metadata.name }}
+    spec:
+      environment: client
+      issuerRef:
+        apiVersion: cert-manager.io/v1
+        kind: ClusterIssuer
+        name: selfsigned
+      kubeconfig: true
+      kubeconfigEndpoint: "https://{{ .InfraControlPlaneEndpoint.host }}:{{ .ClusterClaim.spec.client.network.kubeApiserverPort }}"

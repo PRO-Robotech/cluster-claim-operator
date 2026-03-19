@@ -1,0 +1,47 @@
+# Шаблон: Application (ArgoCD)
+# Используется в: spec.observeTemplateRef.name
+# Оператор задаёт: metadata.name = {claim.name}, metadata.namespace = {claim.namespace}
+# Контекст: только .ClusterClaim (Step 1)
+apiVersion: clusterclaim.in-cloud.io/v1alpha1
+kind: ClusterClaimObserveResourceTemplate
+metadata:
+  name: default-observe
+spec:
+  value: |
+    apiVersion: argoproj.io/v1alpha1
+    kind: Application
+    metadata:
+      labels:
+        xcluster.in-cloud.io/name: {{ .ClusterClaim.metadata.name }}
+    spec:
+      destination:
+        name: in-cluster
+        namespace: {{ .ClusterClaim.metadata.namespace }}
+      project: common
+      source:
+        helm:
+          releaseName: {{ .ClusterClaim.metadata.name }}
+          valuesObject:
+            cluster:
+              name: in-cluster
+              project: common
+            project: common
+            repo:
+              path: .
+              targetRevision: HEAD
+              url: https://gitlab.beget.ru/cloud/k8s/charts/cluster
+            syncPolicy:
+              automated:
+                prune: true
+                selfHeal: true
+              syncOptions:
+              - CreateNamespace=false
+        path: .
+        repoURL: https://gitlab.beget.ru/cloud/k8s/charts/cluster
+        targetRevision: HEAD
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=false

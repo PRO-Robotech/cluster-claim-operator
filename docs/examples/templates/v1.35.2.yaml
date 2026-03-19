@@ -1,0 +1,98 @@
+# Шаблон: Cluster[client]
+# Используется в: spec.clusterTemplateRef.client.name
+# Оператор задаёт: metadata.name = {claim.name}-client, metadata.namespace = {claim.namespace}
+# Контекст: .ClusterClaim + .InfraControlPlaneEndpoint + .InfraControlPlaneReplicas (Step 10)
+apiVersion: clusterclaim.in-cloud.io/v1alpha1
+kind: ClusterClaimObserveResourceTemplate
+metadata:
+  name: v1.35.2
+spec:
+  value: |
+    apiVersion: cluster.x-k8s.io/v1beta2
+    kind: Cluster
+    metadata:
+      annotations:
+        dependency.kubeadmres.in-cloud.io/ready: "true"
+      labels:
+        beget.com/environment: client
+        cluster.x-k8s.io/cluster-name: {{ .ClusterClaim.metadata.name }}-client
+        topology.cluster.x-k8s.io/owned: ""
+        xcluster.in-cloud.io/name: {{ .ClusterClaim.metadata.name }}
+    spec:
+      clusterNetwork:
+        apiServerPort: {{ .ClusterClaim.spec.client.network.kubeApiserverPort }}
+        pods:
+          cidrBlocks:
+          - {{ .ClusterClaim.spec.client.network.podCidr }}
+        serviceDomain: cluster.local
+        services:
+          cidrBlocks:
+          - {{ .ClusterClaim.spec.client.network.serviceCidr }}
+
+      paused: {{ .ClusterClaim.spec.client.paused | default false }}
+
+      topology:
+        classRef:
+          name: addon-claim-cluster-template
+          namespace: bcloud-capi
+
+        variables:
+          - name: addon_revision
+            value: HEAD
+          - name: argocd_source_traget_revision
+            value: HEAD
+
+          - name: beget_clt_load_balancer_listener_ports
+            value:
+              - from: {{ .ClusterClaim.spec.client.network.kubeApiserverPort }}
+                to: 30000
+                type: controlPlane
+              - from: 8132
+                to: 30132
+                type: generic
+          - name: beget_app_destination_name
+            value: in-cluster
+          - name: beget_clt_customer_login
+            value: {{ .ClusterClaim.metadata.namespace }}
+          - name: beget_tracking_id
+            value: {{ .ClusterClaim.metadata.namespace }}_{{ .ClusterClaim.metadata.name }}:argoproj.io/Application:{{ .ClusterClaim.metadata.namespace }}/{{ .ClusterClaim.metadata.name }}
+          - name: beget_clt_load_balancer_listener_address
+            value: {{ .InfraControlPlaneEndpoint.host }}
+          - name: beget_app_provider_config_ref_name
+            value: {{ .ClusterClaim.metadata.name }}-infra-kubernetes-provider-config
+          - name: beget_etcd_ca_secret_name
+            value: {{ .ClusterClaim.metadata.name }}-infra-etcd
+          - name: cluster_version
+            value: {{ .ClusterClaim.spec.client.componentVersions.kubernetes.version }}
+          - name: beget_clt_controlplane_replicas
+            value: "{{ .InfraControlPlaneReplicas }}"
+          - name: beget_clt_load_balancer_type
+            value: {{ .ClusterClaim.spec.extraEnvs.beget_cluster_load_balancer_type }}
+          - name: beget_xcluster_name
+            value: {{ .ClusterClaim.metadata.name }}
+
+          - name: beget_app_destination_namespace
+            value: beget-system
+          - name: beget_app_namespace
+            value: beget-argocd
+          - name: beget_app_release_name
+            value: client-cp
+          - name: beget_app_values_monitoring_enabled
+            value: false
+
+          - name: beget_clt_load_balancer_backend_port
+            value: 30000
+          - name: beget_clt_load_balancer_healthcheck_interval_sec
+            value: 30
+          - name: beget_clt_load_balancer_healthcheck_threshold
+            value: 3
+          - name: beget_clt_load_balancer_healthcheck_timeout_sec
+            value: 10
+          - name: beget_clt_load_balancer_listener_internal
+            value: false
+          - name: beget_clt_load_balancer_listener_port
+            value: {{ .ClusterClaim.spec.client.network.kubeApiserverPort }}
+          - name: beget_clt_region
+            value: {{ .ClusterClaim.spec.extraEnvs.beget_cluster_region }}
+
+        version: {{ .ClusterClaim.spec.client.componentVersions.kubernetes.version }}

@@ -1,0 +1,99 @@
+# Полный пример ClusterClaim (role: customer/infra, infra + client)
+#
+# Результат: оператор последовательно создаёт ресурсы по шаблонам:
+#   Step 1:  Application        ← observeTemplateRef
+#   Step 2:  CertificateSet[i]  ← certificateSetTemplateRef.infra
+#   Step 4:  Cluster[infra]     ← clusterTemplateRef.infra
+#   Step 6:  CertificateSet[c]  ← certificateSetTemplateRef.client
+#   Step 8:  CcmCsrc            ← ccmCsrTemplateRef
+#   Step 9:  ConfigMap (remote) ← configMapTemplateRef.infra + .client
+#   Step 10: Cluster[client]    ← clusterTemplateRef.client
+#   Step 12: CcmCsrc (update)   ← ccmCsrTemplateRef (повторно)
+apiVersion: clusterclaim.in-cloud.io/v1alpha1
+kind: ClusterClaim
+metadata:
+  name: ec8a00
+  namespace: dlputi1u
+spec:
+  # ──────────────────────────────────────────────
+  # Ссылки на шаблоны (ClusterClaimObserveResourceTemplate)
+  # ──────────────────────────────────────────────
+  observeTemplateRef:
+    name: "default-observe"
+
+  certificateSetTemplateRef:
+    infra:
+      name: "default-certset-infra"
+    client:
+      name: "default-certset-client"
+
+  clusterTemplateRef:
+    infra:
+      name: "v1.34.4"
+    client:
+      name: "v1.35.2"
+
+  ccmCsrTemplateRef:
+    name: "default-ccm"
+
+  configMapTemplateRef:
+    infra:
+      name: "default-cm-infra"
+    client:
+      name: "default-cm-client"
+
+  # ──────────────────────────────────────────────
+  # Общие переменные
+  # ──────────────────────────────────────────────
+  replicas: 1
+
+  configuration:
+    cpuCount: 6
+    diskSize: 51200
+    memory: 12288
+
+  extraEnvs:
+    beget_cluster_customer_login: "dlputi1u"
+    beget_cluster_load_balancer_type: "external"
+    beget_cluster_region: "ru1"
+    beget_vmt_cp_managed_by: "system"
+    beget_vmt_cp_networkTag: "vps"
+    beget_vmt_cp_usePrivateNetwork: true
+
+  # ──────────────────────────────────────────────
+  # Infra-кластер
+  # ──────────────────────────────────────────────
+  infra:
+    paused: false
+    role: "infra"
+    network:
+      serviceCidr: "10.155.0.0/16"
+      podCidr: "10.156.0.0/16"
+      podCidrMaskSize: 27
+      clusterDNS: "10.155.0.10"
+      kubeApiserverPort: 6443
+    componentVersions:
+      kubernetes: { version: "v1.34.4" }
+      runc: { version: "1.1.12" }
+      containerd: { version: "1.7.19" }
+      crictl: { version: "1.30.0" }
+      pause: { version: "3.10" }
+      etcd: { version: "3.5.12" }
+      kubeadm: { version: "1.34.4" }
+      kubectl: { version: "1.34.4" }
+      kubelet: { version: "1.34.4" }
+
+  # ──────────────────────────────────────────────
+  # Client-кластер
+  # ──────────────────────────────────────────────
+  client:
+    enabled: true
+    paused: false
+    network:
+      serviceCidr: "10.155.0.0/16"
+      podCidr: "10.156.0.0/16"
+      podCidrMaskSize: 27
+      clusterDNS: "10.155.0.10"
+      kubeApiserverPort: 26443
+    componentVersions:
+      kubernetes: { version: "v1.35.2" }

@@ -1,0 +1,32 @@
+# Шаблон: CertificateSet[infra]
+# Используется в: spec.certificateSetTemplateRef.infra.name
+# Оператор задаёт: metadata.name = {claim.name}-infra, metadata.namespace = {claim.namespace}
+# Контекст: только .ClusterClaim (Step 2)
+apiVersion: clusterclaim.in-cloud.io/v1alpha1
+kind: ClusterClaimObserveResourceTemplate
+metadata:
+  name: default-certset-infra
+spec:
+  value: |
+    apiVersion: in-cloud.io/v1alpha1
+    kind: CertificateSet
+    metadata:
+      annotations:
+        secret-copy.in-cloud.io/dstClusterKubeconfig: {{ .ClusterClaim.metadata.namespace }}/{{ .ClusterClaim.metadata.name }}-infra-kubeconfig
+        secret-copy.in-cloud.io/dstNamespace: beget-system
+        strategy.secret-copy.in-cloud.io/ifExist: overwrite
+      labels:
+        cluster.x-k8s.io/cluster-name: {{ .ClusterClaim.metadata.name }}-infra
+        clusterctl.cluster.x-k8s.io/move: "true"
+        secret-copy.in-cloud.io: "true"
+        xcluster.in-cloud.io/name: {{ .ClusterClaim.metadata.name }}
+    spec:
+      environment: {{ .ClusterClaim.spec.infra.role }}
+      issuerRef:
+        apiVersion: cert-manager.io/v1
+        kind: ClusterIssuer
+        name: selfsigned
+      issuerRefOidc:
+        apiVersion: cert-manager.io/v1
+        kind: ClusterIssuer
+        name: selfsigned-cluster-issuer

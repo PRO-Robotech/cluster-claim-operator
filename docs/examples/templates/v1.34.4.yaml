@@ -1,0 +1,111 @@
+# Шаблон: Cluster[infra]
+# Используется в: spec.clusterTemplateRef.infra.name
+# Оператор задаёт: metadata.name = {claim.name}-infra, metadata.namespace = {claim.namespace}
+# Контекст: только .ClusterClaim (Step 4)
+apiVersion: clusterclaim.in-cloud.io/v1alpha1
+kind: ClusterClaimObserveResourceTemplate
+metadata:
+  name: v1.34.4
+spec:
+  value: |
+    apiVersion: cluster.x-k8s.io/v1beta2
+    kind: Cluster
+    metadata:
+      labels:
+        beget.com/environment: infra
+        cluster.x-k8s.io/cluster-name: {{ .ClusterClaim.metadata.name }}-infra
+        topology.cluster.x-k8s.io/owned: ""
+        xcluster.in-cloud.io/name: {{ .ClusterClaim.metadata.name }}
+    spec:
+      clusterNetwork:
+        apiServerPort: {{ .ClusterClaim.spec.infra.network.kubeApiserverPort }}
+        pods:
+          cidrBlocks:
+          - {{ .ClusterClaim.spec.infra.network.podCidr }}
+        serviceDomain: cluster.local
+        services:
+          cidrBlocks:
+          - {{ .ClusterClaim.spec.infra.network.serviceCidr }}
+
+      paused: {{ .ClusterClaim.spec.infra.paused }}
+
+      topology:
+        classRef:
+          name: beget-infra
+          namespace: beget-capi-system
+
+        controlPlane:
+          metadata:
+            labels:
+              capi.beget.io/metadata-required: "true"
+          replicas: {{ .ClusterClaim.spec.replicas }}
+
+        variables:
+          - name: beget_cluster_customer_login
+            value: {{ .ClusterClaim.metadata.namespace }}
+          - name: beget_cluster_region
+            value: {{ .ClusterClaim.spec.extraEnvs.beget_cluster_region }}
+          - name: beget_vmt_cp_managed_by
+            value: {{ .ClusterClaim.spec.extraEnvs.beget_vmt_cp_managed_by }}
+          - name: beget_cluster_load_balancer_type
+            value: {{ .ClusterClaim.spec.extraEnvs.beget_cluster_load_balancer_type }}
+          - name: beget_vmt_cp_usePrivateNetwork
+            value: {{ .ClusterClaim.spec.extraEnvs.beget_vmt_cp_usePrivateNetwork }}
+          - name: beget_vmt_cp_networkTag
+            value: {{ .ClusterClaim.spec.extraEnvs.beget_vmt_cp_networkTag }}
+
+          - name: cluster_dns_svc
+            value: {{ .ClusterClaim.spec.infra.network.clusterDNS }}
+          - name: cluster_service_subnet
+            value: {{ .ClusterClaim.spec.infra.network.serviceCidr }}
+          - name: cluster_pod_cidr
+            value: {{ .ClusterClaim.spec.infra.network.podCidr }}
+          - name: cluster_pod_cidr_mask_size
+            value: {{ .ClusterClaim.spec.infra.network.podCidrMaskSize }}
+          - name: beget_cluster_load_balancer_listener_ports
+            value:
+              - from: {{ .ClusterClaim.spec.infra.network.kubeApiserverPort }}
+                to: {{ .ClusterClaim.spec.infra.network.kubeApiserverPort }}
+                type: controlPlane
+              - from: 443
+                to: 32443
+                type: generic
+
+          - name: beget_vmt_cp_configuration_cpucount
+            value: {{ .ClusterClaim.spec.configuration.cpuCount }}
+          - name: beget_vmt_cp_configuration_disksize
+            value: {{ .ClusterClaim.spec.configuration.diskSize }}
+          - name: beget_vmt_cp_configuration_memory
+            value: {{ .ClusterClaim.spec.configuration.memory }}
+
+          - name: runc_version
+            value: {{ .ClusterClaim.spec.infra.componentVersions.runc.version }}
+          - name: containerd_version
+            value: {{ .ClusterClaim.spec.infra.componentVersions.containerd.version }}
+          - name: crictl_version
+            value: {{ .ClusterClaim.spec.infra.componentVersions.crictl.version }}
+          - name: pause_version
+            value: {{ .ClusterClaim.spec.infra.componentVersions.pause.version }}
+          - name: etcd_version
+            value: {{ .ClusterClaim.spec.infra.componentVersions.etcd.version }}
+          - name: kubeadm_version
+            value: {{ .ClusterClaim.spec.infra.componentVersions.kubeadm.version }}
+          - name: kubectl_version
+            value: {{ .ClusterClaim.spec.infra.componentVersions.kubectl.version }}
+          - name: kubelet_version
+            value: {{ .ClusterClaim.spec.infra.componentVersions.kubelet.version }}
+          - name: kube_apiserver_version
+            value: {{ .ClusterClaim.spec.infra.componentVersions.kubernetes.version }}
+          - name: kube_controller_manager_version
+            value: {{ .ClusterClaim.spec.infra.componentVersions.kubernetes.version }}
+          - name: kube_scheduler_version
+            value: {{ .ClusterClaim.spec.infra.componentVersions.kubernetes.version }}
+
+          - name: containerd_mirror_url
+            value: https://registryproxy.k8s.beget
+          - name: beget_cluster_claim_name
+            value: {{ .ClusterClaim.metadata.name }}
+          - name: addon_revision
+            value: HEAD
+
+        version: {{ .ClusterClaim.spec.infra.componentVersions.kubernetes.version }}
