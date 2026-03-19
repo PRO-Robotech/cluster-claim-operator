@@ -299,73 +299,11 @@ spec:
 Оператор после рендера добавит `metadata.name: {claim}-client`, `metadata.namespace: {claim-ns}`.
 Вычисляемое поле `.InfraControlPlaneEndpoint` доступно, т.к. этот шаг идёт после Cluster[infra] provisioned.
 
-### 3.6. Go text/template — синтаксис и функции для рендера YAML
+### 3.6. Go text/template — рендер YAML
 
-Шаблоны используют стандартный Go `text/template` с дополнительными функциями. Рендер выполняется с опцией `missingkey=error` — обращение к несуществующему полю вызывает ошибку.
+Шаблоны используют стандартный Go `text/template` + все функции из библиотеки [Masterminds/sprig](https://masterminds.github.io/sprig/) + `toYaml`/`indent`. Рендер выполняется с опцией `missingkey=error` — обращение к несуществующему полю вызывает ошибку.
 
-#### Базовый синтаксис Go template
-
-```yaml
-# Подстановка значения
-name: {{ .ClusterClaim.metadata.name }}-infra
-
-# Условие
-{{ if .ClusterClaim.spec.client.enabled }}
-clientClusterName: {{ .ClusterClaim.metadata.name }}-client
-{{ end }}
-
-# Цикл (если значение — список)
-{{ range .ClusterClaim.spec.someList }}
-- {{ . }}
-{{ end }}
-
-# Присвоение переменной
-{{ $ns := .ClusterClaim.metadata.namespace }}
-namespace: {{ $ns }}
-
-# Pipe (конвейер)
-value: {{ .ClusterClaim.spec.infra.role | quote }}
-```
-
-#### Функции для работы с YAML
-
-| Функция | Описание | Пример |
-|---------|----------|--------|
-| `toYaml` | Сериализует объект в YAML-строку. Основная функция для вставки вложенных структур | `{{ .ClusterClaim.spec.extraEnvs \| toYaml \| indent 8 }}` |
-| `indent` | Добавляет N пробелов в начало каждой строки. Используется после `toYaml` для корректного вложения | `{{ "line1\nline2" \| indent 4 }}` |
-
-**Типичный паттерн** — вставка map/list как вложенного YAML:
-```yaml
-spec:
-  variables:
-    {{ .ClusterClaim.spec.extraEnvs | toYaml | indent 4 }}
-```
-
-#### Функции для работы со строками
-
-| Функция | Описание | Пример |
-|---------|----------|--------|
-| `quote` | Оборачивает в двойные кавычки `"..."` | `{{ "value" \| quote }}` → `"value"` |
-| `trimSuffix` | Удаляет суффикс | `{{ "foo-infra" \| trimSuffix "-infra" }}` → `foo` |
-| `trimPrefix` | Удаляет префикс | `{{ "v1.34.4" \| trimPrefix "v" }}` → `1.34.4` |
-| `contains` | Проверяет наличие подстроки (bool) | `{{ if contains "infra" .value }}...{{ end }}` |
-| `replace` | Заменяет подстроку | `{{ "a-b" \| replace "-" "_" }}` → `a_b` |
-| `upper` | В верхний регистр | `{{ "abc" \| upper }}` → `ABC` |
-| `lower` | В нижний регистр | `{{ "ABC" \| lower }}` → `abc` |
-
-#### Функции для значений по умолчанию и валидации
-
-| Функция | Описание | Пример |
-|---------|----------|--------|
-| `default` | Возвращает значение по умолчанию, если исходное пустое/nil | `{{ .value \| default "v1.0.0" }}` |
-| `required` | Завершает рендер с ошибкой, если значение пустое/nil | `{{ .ClusterClaim.spec.replicas \| required }}` |
-
-#### Функции кодирования
-
-| Функция | Описание | Пример |
-|---------|----------|--------|
-| `b64enc` | Base64 encode | `{{ "secret" \| b64enc }}` → `c2VjcmV0` |
-| `b64dec` | Base64 decode | `{{ "c2VjcmV0" \| b64dec }}` → `secret` |
+Доступен **весь** функционал Go-шаблонов: подстановки, условия (`if`/`else`), циклы (`range`), переменные (`$var := ...`), pipe-конвейеры, а также все sprig-функции (строки, math, кодирование, `default`, `required`, `hasPrefix`, `quote`, `b64enc`, и т.д.).
 
 ---
 
