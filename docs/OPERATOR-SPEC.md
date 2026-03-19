@@ -95,10 +95,11 @@ ClusterClaim "ec8a00"                 ClusterClaimObserveResourceTemplate
 
 **Naming conventions (remote — infra cluster)**:
 
-| templateRef поле | `metadata.name` | `metadata.namespace` |
-|------------------|-----------------|----------------------|
-| `configMapTemplateRef.infra` | `parameters-infra` | `beget-system` |
-| `configMapTemplateRef.client` | `parameters-client` | `beget-system` |
+| templateRef поле | `metadata.name` | `metadata.namespace` | role |
+|------------------|-----------------|----------------------|------|
+| `configMapTemplateRef.infra` | `parameters-infra` | `beget-system` | infra |
+| `configMapTemplateRef.infra` | `parameters-system` | `beget-system` | system |
+| `configMapTemplateRef.client` | `parameters-client` | `beget-system` | — |
 
 Имена и namespace remote-ресурсов задаёт оператор по конвенции, а **не** шаблон. Шаблон не должен содержать `metadata.name` / `metadata.namespace`.
 
