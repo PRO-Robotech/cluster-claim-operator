@@ -7,9 +7,9 @@ kind: ClusterClaimObserveResourceTemplate
 metadata:
   name: v1.35.2
 spec:
+  apiVersion: cluster.x-k8s.io/v1beta2
+  kind: Cluster
   value: |
-    apiVersion: cluster.x-k8s.io/v1beta2
-    kind: Cluster
     metadata:
       annotations:
         dependency.kubeadmres.in-cloud.io/ready: "true"

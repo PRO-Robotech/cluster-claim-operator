@@ -7,9 +7,9 @@ kind: ClusterClaimObserveResourceTemplate
 metadata:
   name: default-certset-infra
 spec:
+  apiVersion: in-cloud.io/v1alpha1
+  kind: CertificateSet
   value: |
-    apiVersion: in-cloud.io/v1alpha1
-    kind: CertificateSet
     metadata:
       annotations:
         secret-copy.in-cloud.io/dstClusterKubeconfig: {{ .ClusterClaim.metadata.namespace }}/{{ .ClusterClaim.metadata.name }}-infra-kubeconfig

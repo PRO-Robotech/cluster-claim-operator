@@ -7,9 +7,9 @@ kind: ClusterClaimObserveResourceTemplate
 metadata:
   name: default-observe
 spec:
+  apiVersion: argoproj.io/v1alpha1
+  kind: Application
   value: |
-    apiVersion: argoproj.io/v1alpha1
-    kind: Application
     metadata:
       labels:
         xcluster.in-cloud.io/name: {{ .ClusterClaim.metadata.name }}

@@ -8,9 +8,9 @@ kind: ClusterClaimObserveResourceTemplate
 metadata:
   name: default-cm-client
 spec:
+  apiVersion: v1
+  kind: ConfigMap
   value: |
-    apiVersion: v1
-    kind: ConfigMap
     metadata:
       labels:
         xcluster.in-cloud.io/name: {{ .ClusterClaim.metadata.name }}

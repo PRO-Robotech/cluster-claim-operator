@@ -123,10 +123,14 @@ ClusterClaim "ec8a00"                 ClusterClaimObserveResourceTemplate
 ### 2.5. Что содержит шаблон
 
 ```
+┌─ ClusterClaimObserveResourceTemplate.spec ─────────────────────┐
+│                                                                       │
+│  apiVersion: ...       ← обязательно (GVK ресурса) (immutable)        │
+│  kind: ...             ← обязательно (GVK ресурса) (immutable)        │
+│  value: ...            ← обязательно                                  │
+└───────────────────────────────────────────────────────────────────────┘
 ┌─ ClusterClaimObserveResourceTemplate.spec.value ─────────────────────┐
 │                                                                       │
-│  apiVersion: ...       ← обязательно (GVK ресурса)                   │
-│  kind: ...             ← обязательно                                  │
 │  metadata:                                                            │
 │    labels: ...         ← опционально (будут merge с operator labels)  │
 │    annotations: ...    ← опционально                                  │
@@ -147,9 +151,9 @@ kind: ClusterClaimObserveResourceTemplate
 metadata:
   name: default-certset-infra
 spec:
+  apiVersion: in-cloud.io/v1alpha1
+  kind: CertificateSet
   value: |
-    apiVersion: in-cloud.io/v1alpha1
-    kind: CertificateSet
     metadata:
       labels:
         cluster.x-k8s.io/cluster-name: {{ .ClusterClaim.metadata.name }}-infra
@@ -180,9 +184,9 @@ kind: ClusterClaimObserveResourceTemplate
 metadata:
   name: default-cm-infra
 spec:
+  apiVersion: v1
+  kind: ConfigMap
   value: |
-    apiVersion: v1
-    kind: ConfigMap
     metadata:
       labels:
         xcluster.in-cloud.io/name: {{ .ClusterClaim.metadata.name }}
@@ -191,7 +195,8 @@ spec:
       clusterName: {{ .ClusterClaim.metadata.name }}-infra
       clusterHost: {{ .InfraControlPlaneEndpoint.host }}
       clusterPort: "{{ .ClusterClaim.spec.infra.network.kubeApiserverPort }}"
-      controlPlaneReplicas: "{{ .InfraControlPlaneReplicas }}"
+      controlPlaneAvailableReplicas: "{{ .InfraControlPlaneAvailableReplicas }}"
+      controlPlaneDesiredReplicas: "{{ .InfraControlPlaneDesiredReplicas }}"
       customer: {{ .ClusterClaim.metadata.namespace }}
       ServiceCidr: {{ .ClusterClaim.spec.infra.network.serviceCidr }}
       podCidr: {{ .ClusterClaim.spec.infra.network.podCidr }}
@@ -217,10 +222,11 @@ type TemplateContext struct {
     ClusterClaim  ClusterClaimSnapshot
 
     // Вычисляемые поля — появляются по мере прохождения pipeline
-    InfraControlPlaneEndpoint     *ControlPlaneEndpoint  // host + port из Cluster[infra]
-    InfraControlPlaneInitialized  bool
-    InfraControlPlaneReplicas     int32
-    ClientControlPlaneInitialized bool
+    InfraControlPlaneEndpoint           *ControlPlaneEndpoint  // host + port из Cluster[infra]
+    InfraControlPlaneInitialized        bool
+    InfraControlPlaneAvailableReplicas  int32
+    InfraControlPlaneDesiredReplicas    int32
+    ClientControlPlaneInitialized       bool
 }
 ```
 
@@ -255,22 +261,23 @@ type TemplateContext struct {
 | `{{ .InfraControlPlaneEndpoint.host }}` | `Cluster[infra].spec.controlPlaneEndpoint.host` | после Step 5 (Cluster[infra] provisioned) |
 | `{{ .InfraControlPlaneEndpoint.port }}` | `Cluster[infra].spec.controlPlaneEndpoint.port` | после Step 5 |
 | `{{ .InfraControlPlaneInitialized }}` | `Cluster[infra].status.initialization.controlPlaneInitialized` | после Step 7 |
-| `{{ .InfraControlPlaneReplicas }}` | `max(Cluster[infra].status.controlPlane.availableReplicas, 1)` | после Step 7 |
+| `{{ .InfraControlPlaneAvailableReplicas }}` | `max(Cluster[infra].status.controlPlane.availableReplicas, 1)` | после Step 7 |
+| `{{ .InfraControlPlaneDesiredReplicas }}` | `max(Cluster[infra].status.controlPlane.desiredReplicas, 1)` | после Step 7 |
 | `{{ .ClientControlPlaneInitialized }}` | `Cluster[client].status.initialization.controlPlaneInitialized` | после Step 12 |
 
 ### 3.4. Какие вычисляемые поля доступны на каком шаге
 
-| Шаг pipeline | `.ClusterClaim` | `.InfraControlPlaneEndpoint` | `.InfraControlPlaneInitialized` | `.InfraControlPlaneReplicas` | `.ClientControlPlaneInitialized` |
-|-------------|:-:|:-:|:-:|:-:|:-:|
-| Application | ✓ | — | — | — | — |
-| CertificateSet[infra] | ✓ | — | — | — | — |
-| Cluster[infra] | ✓ | — | — | — | — |
-| CertificateSet[client] | ✓ | ✓ | — | — | — |
-| CcmCsrc (первый раз) | ✓ | ✓ | ✓ | — | — |
-| ConfigMap[infra] | ✓ | ✓ | ✓ | ✓ | — |
-| ConfigMap[client] | ✓ | ✓ | ✓ | ✓ | — |
-| Cluster[client] | ✓ | ✓ | ✓ | ✓ | — |
-| CcmCsrc (повторный) | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Шаг pipeline | `.ClusterClaim` | `.InfraControlPlaneEndpoint` | `.InfraControlPlaneInitialized` | `.InfraControlPlaneAvailableReplicas` | `.InfraControlPlaneDesiredReplicas` | `.ClientControlPlaneInitialized` |
+|-------------|:-:|:-:|:-:|:-:|:-:|:-:|
+| Application | ✓ | — | — | — | — | — |
+| CertificateSet[infra] | ✓ | — | — | — | — | — |
+| Cluster[infra] | ✓ | — | — | — | — | — |
+| CertificateSet[client] | ✓ | ✓ | — | — | — | — |
+| CcmCsrc (первый раз) | ✓ | ✓ | ✓ | — | — | — |
+| ConfigMap[infra] | ✓ | ✓ | ✓ | ✓ | ✓ | — |
+| ConfigMap[client] | ✓ | ✓ | ✓ | ✓ | ✓ | — |
+| Cluster[client] | ✓ | ✓ | ✓ | ✓ | ✓ | — |
+| CcmCsrc (повторный) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 ### 3.5. Пример: шаблон CertificateSet[client] с вычисляемыми полями
 
@@ -280,9 +287,9 @@ kind: ClusterClaimObserveResourceTemplate
 metadata:
   name: default-certset-client
 spec:
+  apiVersion: in-cloud.io/v1alpha1
+  kind: CertificateSet
   value: |
-    apiVersion: in-cloud.io/v1alpha1
-    kind: CertificateSet
     metadata:
       labels:
         cluster.x-k8s.io/cluster-name: {{ .ClusterClaim.metadata.name }}-client
