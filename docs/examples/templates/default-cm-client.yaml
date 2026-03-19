@@ -2,7 +2,7 @@
 # Используется в: spec.configMapTemplateRef.client.name
 # Создаётся В REMOTE (infra) КЛАСТЕРЕ
 # metadata.name ("parameters-client") и metadata.namespace ("beget-system") задаёт оператор
-# Контекст: .ClusterClaim + .InfraControlPlaneEndpoint + .InfraControlPlaneReplicas (Step 9)
+# Контекст: .ClusterClaim + .InfraControlPlaneEndpoint + .InfraControlPlaneAvailableReplicas + .InfraControlPlaneDesiredReplicas (Step 9)
 apiVersion: clusterclaim.in-cloud.io/v1alpha1
 kind: ClusterClaimObserveResourceTemplate
 metadata:
@@ -23,7 +23,8 @@ spec:
       clusterName: {{ .ClusterClaim.metadata.name }}-client
       clusterHost: {{ .InfraControlPlaneEndpoint.host }}
       clusterPort: "{{ .ClusterClaim.spec.client.network.kubeApiserverPort }}"
-      controlPlaneReplicas: "{{ .InfraControlPlaneReplicas }}"
+      controlPlaneAvailableReplicas: "{{ .InfraControlPlaneAvailableReplicas }}"
+      controlPlaneDesiredReplicas: "{{ .InfraControlPlaneDesiredReplicas }}"
 
       clusterClientEnabled: "{{ .ClusterClaim.spec.client.enabled }}"
       clusterClientName: {{ .ClusterClaim.metadata.name }}-client

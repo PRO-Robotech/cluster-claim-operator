@@ -375,7 +375,8 @@ spec:
                                      │ сразу
                           ┌──────────▼──────────┐
                   Step 10 │  Cluster[client]    │  Рендер с .InfraControlPlaneEndpoint,
-                          │                     │  .InfraControlPlaneReplicas
+                          │                     │  .InfraControlPlaneAvailableReplicas,
+                          |                     |  .InfraControlPlaneDesiredReplicas
                           │                     │  [skip если client.enabled=false]
                           └──────────┬──────────┘
                                      │
