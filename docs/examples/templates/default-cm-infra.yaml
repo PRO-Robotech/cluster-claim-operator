@@ -2,15 +2,15 @@
 # Используется в: spec.configMapTemplateRef.infra.name
 # Создаётся В REMOTE (infra) КЛАСТЕРЕ
 # metadata.name ("parameters-infra") и metadata.namespace ("beget-system") задаёт оператор
-# Контекст: .ClusterClaim + .InfraControlPlaneEndpoint + .InfraControlPlaneReplicas (Step 9)
+# Контекст: .ClusterClaim + .InfraControlPlaneEndpoint + .InfraControlPlaneAvailableReplicas + .InfraControlPlaneDesiredReplicas (Step 9)
 apiVersion: clusterclaim.in-cloud.io/v1alpha1
 kind: ClusterClaimObserveResourceTemplate
 metadata:
   name: default-cm-infra
 spec:
+  apiVersion: v1
+  kind: ConfigMap
   value: |
-    apiVersion: v1
-    kind: ConfigMap
     metadata:
       labels:
         xcluster.in-cloud.io/name: {{ .ClusterClaim.metadata.name }}
@@ -23,7 +23,8 @@ spec:
       clusterName: {{ .ClusterClaim.metadata.name }}-infra
       clusterHost: {{ .InfraControlPlaneEndpoint.host }}
       clusterPort: "{{ .ClusterClaim.spec.infra.network.kubeApiserverPort }}"
-      controlPlaneReplicas: "{{ .InfraControlPlaneReplicas }}"
+      controlPlaneAvailableReplicas: "{{ .InfraControlPlaneAvailableReplicas }}"
+      controlPlaneDesiredReplicas: "{{ .InfraControlPlaneDesiredReplicas }}"
 
       clusterClientEnabled: "{{ .ClusterClaim.spec.client.enabled }}"
       clusterClientName: {{ .ClusterClaim.metadata.name }}-client

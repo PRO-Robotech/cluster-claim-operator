@@ -1,15 +1,15 @@
 # Шаблон: Cluster[client]
 # Используется в: spec.clusterTemplateRef.client.name
 # Оператор задаёт: metadata.name = {claim.name}-client, metadata.namespace = {claim.namespace}
-# Контекст: .ClusterClaim + .InfraControlPlaneEndpoint + .InfraControlPlaneReplicas (Step 10)
+# Контекст: .ClusterClaim + .InfraControlPlaneEndpoint + .InfraControlPlaneEndpoint + .InfraControlPlaneDesiredReplicas (Step 10)
 apiVersion: clusterclaim.in-cloud.io/v1alpha1
 kind: ClusterClaimObserveResourceTemplate
 metadata:
   name: v1.35.2
 spec:
+  apiVersion: cluster.x-k8s.io/v1beta2
+  kind: Cluster
   value: |
-    apiVersion: cluster.x-k8s.io/v1beta2
-    kind: Cluster
     metadata:
       annotations:
         dependency.kubeadmres.in-cloud.io/ready: "true"
@@ -65,7 +65,7 @@ spec:
           - name: cluster_version
             value: {{ .ClusterClaim.spec.client.componentVersions.kubernetes.version }}
           - name: beget_clt_controlplane_replicas
-            value: "{{ .InfraControlPlaneReplicas }}"
+            value: "{{ .InfraControlPlaneDesiredReplicas }}"
           - name: beget_clt_load_balancer_type
             value: {{ .ClusterClaim.spec.extraEnvs.beget_cluster_load_balancer_type }}
           - name: beget_xcluster_name
