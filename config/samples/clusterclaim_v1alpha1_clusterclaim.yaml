@@ -1,0 +1,53 @@
+apiVersion: clusterclaim.in-cloud.io/v1alpha1
+kind: ClusterClaim
+metadata:
+  name: example
+  namespace: default
+spec:
+  observeTemplateRef:
+    name: default-observe
+  certificateSetTemplateRef:
+    infra:
+      name: default-certset-infra
+    client:
+      name: default-certset-client
+  clusterTemplateRef:
+    infra:
+      name: v1.34.4
+    client:
+      name: v1.35.2
+  ccmCsrTemplateRef:
+    name: default-ccm
+  configMapTemplateRef:
+    infra:
+      name: default-cm-infra
+    client:
+      name: default-cm-client
+  replicas: 1
+  configuration:
+    cpuCount: 6
+    diskSize: 51200
+    memory: 12288
+  extraEnvs:
+    beget_cluster_region: "ru1"
+  infra:
+    role: customer/infra
+    paused: false
+    network:
+      serviceCidr: "10.96.0.0/12"
+      podCidr: "10.244.0.0/16"
+      clusterDNS: "10.96.0.10"
+      kubeApiserverPort: 6443
+    componentVersions:
+      kubernetes:
+        version: v1.34.4
+  client:
+    enabled: true
+    network:
+      serviceCidr: "10.96.0.0/12"
+      podCidr: "10.244.0.0/16"
+      clusterDNS: "10.96.0.10"
+      kubeApiserverPort: 26443
+    componentVersions:
+      kubernetes:
+        version: v1.35.2

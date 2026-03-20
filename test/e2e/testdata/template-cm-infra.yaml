@@ -1,0 +1,20 @@
+apiVersion: clusterclaim.in-cloud.io/v1alpha1
+kind: ClusterClaimObserveResourceTemplate
+metadata:
+  name: e2e-cm-infra
+spec:
+  apiVersion: v1
+  kind: ConfigMap
+  value: |
+    metadata:
+      labels:
+        xcluster.in-cloud.io/name: {{ .ClusterClaim.metadata.name }}
+    data:
+      environment: infra
+      xcluster: {{ .ClusterClaim.metadata.name }}
+      customer: {{ .ClusterClaim.metadata.namespace }}
+      clusterName: {{ .ClusterClaim.metadata.name }}-infra
+      clusterHost: {{ .InfraControlPlaneEndpoint.Host }}
+      clusterPort: "{{ .ClusterClaim.spec.infra.network.kubeApiserverPort }}"
+      controlPlaneAvailableReplicas: "{{ .InfraControlPlaneAvailableReplicas }}"
+      controlPlaneDesiredReplicas: "{{ .InfraControlPlaneDesiredReplicas }}"
