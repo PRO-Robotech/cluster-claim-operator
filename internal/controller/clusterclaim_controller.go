@@ -135,13 +135,19 @@ func (r *ClusterClaimReconciler) reconcileDelete(ctx context.Context, claim *clu
 	// 1. Delete remote ConfigMaps (ignore errors -- cluster may be unavailable).
 	r.deleteRemoteConfigMaps(ctx, claim)
 
-	// 2. Delete CcmCsrc.
+	// 2. CcmCsrc.
+	if err := r.removeResourceFinalizer(ctx, CcmCsrcGVK, naming.CcmCsrcName(claim.Name), claim.Namespace); err != nil {
+		return ctrl.Result{}, err
+	}
 	if err := r.deleteResource(ctx, CcmCsrcGVK, naming.CcmCsrcName(claim.Name), claim.Namespace); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// 3. Delete Cluster[client] if client enabled, wait for it to be gone.
+	// 3. Cluster[client]
 	if claim.Spec.Client.Enabled {
+		if err := r.removeResourceFinalizer(ctx, ClusterGVK, naming.ClusterName(claim.Name, "client"), claim.Namespace); err != nil {
+			return ctrl.Result{}, err
+		}
 		deleted, err := r.deleteAndWait(ctx, ClusterGVK, naming.ClusterName(claim.Name, "client"), claim.Namespace)
 		if err != nil {
 			return ctrl.Result{}, err
@@ -151,7 +157,10 @@ func (r *ClusterClaimReconciler) reconcileDelete(ctx context.Context, claim *clu
 		}
 	}
 
-	// 4. Delete Cluster[infra] and wait for it to be gone.
+	// 4. Cluster[infra]
+	if err := r.removeResourceFinalizer(ctx, ClusterGVK, naming.ClusterName(claim.Name, "infra"), claim.Namespace); err != nil {
+		return ctrl.Result{}, err
+	}
 	deleted, err := r.deleteAndWait(ctx, ClusterGVK, naming.ClusterName(claim.Name, "infra"), claim.Namespace)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -160,19 +169,28 @@ func (r *ClusterClaimReconciler) reconcileDelete(ctx context.Context, claim *clu
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
-	// 5. Delete CertificateSet[client] if client enabled.
+	// 5. CertificateSet[client].
 	if claim.Spec.Client.Enabled {
+		if err := r.removeResourceFinalizer(ctx, CertificateSetGVK, naming.CertificateSetName(claim.Name, "client"), claim.Namespace); err != nil {
+			return ctrl.Result{}, err
+		}
 		if err := r.deleteResource(ctx, CertificateSetGVK, naming.CertificateSetName(claim.Name, "client"), claim.Namespace); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
 
-	// 6. Delete CertificateSet[infra].
+	// 6. CertificateSet[infra].
+	if err := r.removeResourceFinalizer(ctx, CertificateSetGVK, naming.CertificateSetName(claim.Name, "infra"), claim.Namespace); err != nil {
+		return ctrl.Result{}, err
+	}
 	if err := r.deleteResource(ctx, CertificateSetGVK, naming.CertificateSetName(claim.Name, "infra"), claim.Namespace); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// 7. Delete Application.
+	// 7. Application
+	if err := r.removeResourceFinalizer(ctx, ApplicationGVK, naming.ApplicationName(claim.Name), claim.Namespace); err != nil {
+		return ctrl.Result{}, err
+	}
 	if err := r.deleteResource(ctx, ApplicationGVK, naming.ApplicationName(claim.Name), claim.Namespace); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -242,7 +260,7 @@ func (r *ClusterClaimReconciler) deleteRemoteConfigMaps(ctx context.Context, cla
 	for _, cmName := range []string{
 		naming.ConfigMapName("infra"),
 		naming.ConfigMapName("system"),
-		naming.ConfigMapName("client")}{
+		naming.ConfigMapName("client")} {
 		cm := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{Name: cmName, Namespace: ns},
 		}

@@ -20,9 +20,13 @@ import (
 	"context"
 	"fmt"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	clusterclaimv1alpha1 "github.com/PRO-Robotech/cluster-claim-operator/api/v1alpha1"
 )
 
 // isConditionTrue checks if a condition of the given type has status "True"
@@ -52,4 +56,36 @@ func (r *ClusterClaimReconciler) getResource(ctx context.Context, gvk schema.Gro
 		return nil, fmt.Errorf("get %s %s/%s: %w", gvk.Kind, namespace, name, err)
 	}
 	return obj, nil
+}
+
+// ensureResourceFinalizer adds the ClusterClaim finalizer to an unstructured resource
+// if it is not already present. This prevents GC from cascade-deleting the resource
+// before the controller's ordered deletion logic runs.
+func (r *ClusterClaimReconciler) ensureResourceFinalizer(ctx context.Context, gvk schema.GroupVersionKind, name, namespace string) error {
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(gvk)
+	if err := r.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, obj); err != nil {
+		return fmt.Errorf("get %s %s/%s for finalizer: %w", gvk.Kind, namespace, name, err)
+	}
+	if controllerutil.AddFinalizer(obj, clusterclaimv1alpha1.ClusterClaimFinalizer) {
+		return r.Update(ctx, obj)
+	}
+	return nil
+}
+
+// removeResourceFinalizer removes the ClusterClaim finalizer from an unstructured resource.
+// NotFound is ignored (resource may already be deleted).
+func (r *ClusterClaimReconciler) removeResourceFinalizer(ctx context.Context, gvk schema.GroupVersionKind, name, namespace string) error {
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(gvk)
+	if err := r.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, obj); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("get %s %s/%s for finalizer removal: %w", gvk.Kind, namespace, name, err)
+	}
+	if controllerutil.RemoveFinalizer(obj, clusterclaimv1alpha1.ClusterClaimFinalizer) {
+		return r.Update(ctx, obj)
+	}
+	return nil
 }

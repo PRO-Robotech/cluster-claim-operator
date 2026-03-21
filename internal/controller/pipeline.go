@@ -150,6 +150,9 @@ func (r *ClusterClaimReconciler) stepClusterClient(ctx context.Context, claim *c
 	if err := r.ensureResource(ctx, claim, claim.Spec.ClusterTemplateRef.Client.Name, naming.ClusterName(claim.Name, "client"), claim.Namespace, *tmplCtx); err != nil {
 		return Proceed, err
 	}
+	if err := r.ensureResourceFinalizer(ctx, ClusterGVK, naming.ClusterName(claim.Name, "client"), claim.Namespace); err != nil {
+		return Proceed, err
+	}
 	r.event(claim, corev1.EventTypeNormal, "CreatedClusterClient", "Cluster[client] %s created", naming.ClusterName(claim.Name, "client"))
 	return Proceed, nil
 }
@@ -222,6 +225,9 @@ func (r *ClusterClaimReconciler) stepApplication(ctx context.Context, claim *clu
 	if err := r.ensureResource(ctx, claim, claim.Spec.ObserveTemplateRef.Name, naming.ApplicationName(claim.Name), claim.Namespace, *tmplCtx); err != nil {
 		return Proceed, err
 	}
+	if err := r.ensureResourceFinalizer(ctx, ApplicationGVK, naming.ApplicationName(claim.Name), claim.Namespace); err != nil {
+		return Proceed, err
+	}
 	r.event(claim, corev1.EventTypeNormal, "CreatedApplication", "Application %s created", naming.ApplicationName(claim.Name))
 	setCondition(claim, clusterclaimv1alpha1.ConditionApplicationCreated, metav1.ConditionTrue, "Created", "Application created successfully")
 	return Proceed, nil
@@ -230,6 +236,9 @@ func (r *ClusterClaimReconciler) stepApplication(ctx context.Context, claim *clu
 // stepCertificateSetInfra creates or updates the infra CertificateSet (Step 2).
 func (r *ClusterClaimReconciler) stepCertificateSetInfra(ctx context.Context, claim *clusterclaimv1alpha1.ClusterClaim, tmplCtx *renderer.TemplateContext) (StepResult, error) {
 	if err := r.ensureResource(ctx, claim, claim.Spec.CertificateSetTemplateRef.Infra.Name, naming.CertificateSetName(claim.Name, "infra"), claim.Namespace, *tmplCtx); err != nil {
+		return Proceed, err
+	}
+	if err := r.ensureResourceFinalizer(ctx, CertificateSetGVK, naming.CertificateSetName(claim.Name, "infra"), claim.Namespace); err != nil {
 		return Proceed, err
 	}
 	return Proceed, nil
@@ -256,6 +265,9 @@ func (r *ClusterClaimReconciler) stepWaitCertSetReady(ctx context.Context, claim
 // stepClusterInfra creates or updates the infra CAPI Cluster (Step 4).
 func (r *ClusterClaimReconciler) stepClusterInfra(ctx context.Context, claim *clusterclaimv1alpha1.ClusterClaim, tmplCtx *renderer.TemplateContext) (StepResult, error) {
 	if err := r.ensureResource(ctx, claim, claim.Spec.ClusterTemplateRef.Infra.Name, naming.ClusterName(claim.Name, "infra"), claim.Namespace, *tmplCtx); err != nil {
+		return Proceed, err
+	}
+	if err := r.ensureResourceFinalizer(ctx, ClusterGVK, naming.ClusterName(claim.Name, "infra"), claim.Namespace); err != nil {
 		return Proceed, err
 	}
 
@@ -304,6 +316,9 @@ func (r *ClusterClaimReconciler) stepCertificateSetClient(ctx context.Context, c
 	if err := r.ensureResource(ctx, claim, claim.Spec.CertificateSetTemplateRef.Client.Name, naming.CertificateSetName(claim.Name, "client"), claim.Namespace, *tmplCtx); err != nil {
 		return Proceed, err
 	}
+	if err := r.ensureResourceFinalizer(ctx, CertificateSetGVK, naming.CertificateSetName(claim.Name, "client"), claim.Namespace); err != nil {
+		return Proceed, err
+	}
 	return Proceed, nil
 }
 
@@ -337,6 +352,9 @@ func (r *ClusterClaimReconciler) stepWaitInfraCPReady(ctx context.Context, claim
 // stepCcmCsrc creates or updates the CcmCsrc resource (Step 8).
 func (r *ClusterClaimReconciler) stepCcmCsrc(ctx context.Context, claim *clusterclaimv1alpha1.ClusterClaim, tmplCtx *renderer.TemplateContext) (StepResult, error) {
 	if err := r.ensureResource(ctx, claim, claim.Spec.CcmCsrTemplateRef.Name, naming.CcmCsrcName(claim.Name), claim.Namespace, *tmplCtx); err != nil {
+		return Proceed, err
+	}
+	if err := r.ensureResourceFinalizer(ctx, CcmCsrcGVK, naming.CcmCsrcName(claim.Name), claim.Namespace); err != nil {
 		return Proceed, err
 	}
 
