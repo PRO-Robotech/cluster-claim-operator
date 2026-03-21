@@ -74,8 +74,30 @@ func (r *ClusterClaimReconciler) executePipeline(ctx context.Context, claim *clu
 		return ctrl.Result{}, err
 	}
 
-	// Build template context. Computed fields are populated by WAIT steps.
-	tmplCtx := renderer.BuildContext(claimUnstructured, nil, nil)
+	// Pre-fetch clusters so all steps see consistent computed fields.
+	var infraCluster, clientCluster *unstructured.Unstructured
+
+	infraObj := &unstructured.Unstructured{}
+	infraObj.SetGroupVersionKind(ClusterGVK)
+	if err := r.Get(ctx, client.ObjectKey{
+		Name:      naming.ClusterName(claim.Name, "infra"),
+		Namespace: claim.Namespace,
+	}, infraObj); err == nil {
+		infraCluster = infraObj
+	}
+
+	if claim.Spec.Client.Enabled {
+		clientObj := &unstructured.Unstructured{}
+		clientObj.SetGroupVersionKind(ClusterGVK)
+		if err := r.Get(ctx, client.ObjectKey{
+			Name:      naming.ClusterName(claim.Name, "client"),
+			Namespace: claim.Namespace,
+		}, clientObj); err == nil {
+			clientCluster = clientObj
+		}
+	}
+
+	tmplCtx := renderer.BuildContext(claimUnstructured, infraCluster, clientCluster)
 
 	steps := []pipelineStep{
 		{"Application", r.stepApplication},

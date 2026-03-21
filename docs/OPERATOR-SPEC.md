@@ -252,32 +252,28 @@ type TemplateContext struct {
 | `{{ .ClusterClaim.spec.client.componentVersions.kubernetes.version }}` | K8s version client |
 | `{{ .ClusterClaim.spec.extraEnvs.beget_cluster_region }}` | Произвольная переменная |
 
-### 3.3. Вычисляемые поля (доступны не на всех шагах)
+### 3.3. Вычисляемые поля
 
-Эти поля заполняются по мере прохождения pipeline — на ранних шагах они ещё `nil`/`false`.
+Эти поля pre-fetch'атся из существующих кластеров **перед** запуском pipeline. Если кластер ещё не создан — поля остаются `nil`/`false`/`0`. WAIT-степы дополнительно обновляют контекст при изменении состояния кластера во время прохождения pipeline.
 
-| Выражение в шаблоне | Откуда берётся | С какого шага доступно |
-|---------------------|----------------|----------------------|
-| `{{ .InfraControlPlaneEndpoint.host }}` | `Cluster[infra].spec.controlPlaneEndpoint.host` | после Step 5 (Cluster[infra] provisioned) |
-| `{{ .InfraControlPlaneEndpoint.port }}` | `Cluster[infra].spec.controlPlaneEndpoint.port` | после Step 5 |
-| `{{ .InfraControlPlaneInitialized }}` | `Cluster[infra].status.initialization.controlPlaneInitialized` | после Step 7 |
-| `{{ .InfraControlPlaneAvailableReplicas }}` | `max(Cluster[infra].status.controlPlane.availableReplicas, 1)` | после Step 7 |
-| `{{ .InfraControlPlaneDesiredReplicas }}` | `max(Cluster[infra].status.controlPlane.desiredReplicas, 1)` | после Step 7 |
-| `{{ .ClientControlPlaneInitialized }}` | `Cluster[client].status.initialization.controlPlaneInitialized` | после Step 12 |
+> **Важно**: `controlPlaneInitialized` — one-way flag, который ставится один раз и не откатывается. Безопасно читать его напрямую из status (в отличие от conditions, которые могут флапать).
 
-### 3.4. Какие вычисляемые поля доступны на каком шаге
+| Выражение в шаблоне | Откуда берётся |
+|---------------------|----------------|
+| `{{ .InfraControlPlaneEndpoint.host }}` | `Cluster[infra].spec.controlPlaneEndpoint.host` |
+| `{{ .InfraControlPlaneEndpoint.port }}` | `Cluster[infra].spec.controlPlaneEndpoint.port` |
+| `{{ .InfraControlPlaneInitialized }}` | `Cluster[infra].status.initialization.controlPlaneInitialized` |
+| `{{ .InfraControlPlaneAvailableReplicas }}` | `Cluster[infra].status.controlPlane.availableReplicas` |
+| `{{ .InfraControlPlaneDesiredReplicas }}` | `Cluster[infra].status.controlPlane.desiredReplicas` |
+| `{{ .ClientControlPlaneInitialized }}` | `Cluster[client].status.initialization.controlPlaneInitialized` |
+| `{{ .ClientControlPlaneAvailableReplicas }}` | `Cluster[client].status.controlPlane.availableReplicas` |
+| `{{ .ClientControlPlaneDesiredReplicas }}` | `Cluster[client].status.controlPlane.desiredReplicas` |
+| `{{ .ClientControlPlaneEndpoint.host }}` | `Cluster[client].spec.controlPlaneEndpoint.host` |
+| `{{ .ClientControlPlaneEndpoint.port }}` | `Cluster[client].spec.controlPlaneEndpoint.port` |
 
-| Шаг pipeline | `.ClusterClaim` | `.InfraControlPlaneEndpoint` | `.InfraControlPlaneInitialized` | `.InfraControlPlaneAvailableReplicas` | `.InfraControlPlaneDesiredReplicas` | `.ClientControlPlaneInitialized` |
-|-------------|:-:|:-:|:-:|:-:|:-:|:-:|
-| Application | ✓ | — | — | — | — | — |
-| CertificateSet[infra] | ✓ | — | — | — | — | — |
-| Cluster[infra] | ✓ | — | — | — | — | — |
-| CertificateSet[client] | ✓ | ✓ | — | — | — | — |
-| CcmCsrc (первый раз) | ✓ | ✓ | ✓ | — | — | — |
-| ConfigMap[infra] | ✓ | ✓ | ✓ | ✓ | ✓ | — |
-| ConfigMap[client] | ✓ | ✓ | ✓ | ✓ | ✓ | — |
-| Cluster[client] | ✓ | ✓ | ✓ | ✓ | ✓ | — |
-| CcmCsrc (повторный) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+### 3.4. Доступность вычисляемых полей
+
+Все вычисляемые поля доступны на **всех** шагах pipeline (если соответствующий кластер уже существует). Контекст собирается один раз перед pipeline и одинаков для всех степов — это гарантирует идемпотентность и предотвращает oscillation при повторном рендеринге ресурсов (например CcmCsrc на Step 8 и Step 12).
 
 ### 3.5. Пример: шаблон CertificateSet[client] с вычисляемыми полями
 
@@ -363,7 +359,7 @@ spec:
                           └──────────┬──────────┘
                                      │ CP initialized  (event от watch)
                           ┌──────────▼──────────┐
-                   Step 8 │      CcmCsrc        │  Рендер, client enabled=false
+                   Step 8 │      CcmCsrc        │  Рендер с актуальным контекстом
                           └──────────┬──────────┘
                                      │
                           ┌──────────▼──────────┐
@@ -388,8 +384,8 @@ spec:
                           └──────────┬──────────┘
                                      │ CP initialized  (event от watch)
                           ┌──────────▼──────────┐
-                  Step 12 │  CcmCsrc (повторно) │  Повторный рендер,
-                          │                     │  client enabled=true
+                  Step 12 │  CcmCsrc (повторно) │  Повторный рендер с тем же
+                          │                     │  контекстом (идемпотентно)
                           │                     │  [skip если client.enabled=false]
                           └──────────┬──────────┘
                                      │
@@ -407,7 +403,7 @@ Step 3:  WAIT Ready            → event: CertificateSet condition Ready=True
 Step 4:  Cluster[infra]        → сразу
 Step 5:  WAIT provisioned      → event: Cluster status.initialization.infrastructureProvisioned
 Step 7:  WAIT CP initialized   → event: Cluster status.initialization.controlPlaneInitialized
-Step 8:  CcmCsrc               → сразу (client enabled=false)
+Step 8:  CcmCsrc               → сразу
 Step 9:  ConfigMap (remote)    → сразу (если configMapTemplateRef указан)
 Step 13: READY
 ```
