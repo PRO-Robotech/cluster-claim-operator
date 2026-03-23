@@ -1,0 +1,10 @@
+apiVersion: clusterclaim.in-cloud.io/v1alpha1
+kind: ClusterClaimObserveResourceTemplate
+metadata:
+  name: e2e-bad-syntax
+spec:
+  apiVersion: argoproj.io/v1alpha1
+  kind: Application
+  value: |
+    spec:
+      project: {{ .ClusterClaim.spec.doesNotExist | badFunction }}

@@ -1,0 +1,12 @@
+apiVersion: clusterclaim.in-cloud.io/v1alpha1
+kind: ClusterClaimObserveResourceTemplate
+metadata:
+  name: example-template
+spec:
+  apiVersion: argoproj.io/v1alpha1
+  kind: Application
+  value: |
+    spec:
+      project: default
+      source:
+        repoURL: https://example.com

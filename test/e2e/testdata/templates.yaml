@@ -1,0 +1,121 @@
+---
+apiVersion: clusterclaim.in-cloud.io/v1alpha1
+kind: ClusterClaimObserveResourceTemplate
+metadata:
+  name: e2e-observe
+spec:
+  apiVersion: argoproj.io/v1alpha1
+  kind: Application
+  value: |
+    metadata:
+      labels:
+        xcluster.in-cloud.io/name: {{ .ClusterClaim.metadata.name }}
+    spec:
+      project: default
+      source:
+        repoURL: https://example.com
+---
+apiVersion: clusterclaim.in-cloud.io/v1alpha1
+kind: ClusterClaimObserveResourceTemplate
+metadata:
+  name: e2e-certset-infra
+spec:
+  apiVersion: in-cloud.io/v1alpha1
+  kind: CertificateSet
+  value: |
+    metadata:
+      labels:
+        cluster.x-k8s.io/cluster-name: {{ .ClusterClaim.metadata.name }}-infra
+    spec:
+      environment: {{ .ClusterClaim.spec.infra.role }}
+      issuerRef:
+        kind: ClusterIssuer
+        name: selfsigned
+---
+apiVersion: clusterclaim.in-cloud.io/v1alpha1
+kind: ClusterClaimObserveResourceTemplate
+metadata:
+  name: e2e-certset-client
+spec:
+  apiVersion: in-cloud.io/v1alpha1
+  kind: CertificateSet
+  value: |
+    metadata:
+      labels:
+        cluster.x-k8s.io/cluster-name: {{ .ClusterClaim.metadata.name }}-client
+    spec:
+      environment: client
+      issuerRef:
+        kind: ClusterIssuer
+        name: selfsigned
+---
+apiVersion: clusterclaim.in-cloud.io/v1alpha1
+kind: ClusterClaimObserveResourceTemplate
+metadata:
+  name: e2e-cluster-infra
+spec:
+  apiVersion: cluster.x-k8s.io/v1beta2
+  kind: Cluster
+  value: |
+    metadata:
+      labels:
+        cluster.x-k8s.io/cluster-name: {{ .ClusterClaim.metadata.name }}-infra
+    spec:
+      paused: {{ .ClusterClaim.spec.infra.paused }}
+      clusterNetwork:
+        apiServerPort: {{ .ClusterClaim.spec.infra.network.kubeApiserverPort }}
+        pods:
+          cidrBlocks:
+          - {{ .ClusterClaim.spec.infra.network.podCidr }}
+        services:
+          cidrBlocks:
+          - {{ .ClusterClaim.spec.infra.network.serviceCidr }}
+---
+apiVersion: clusterclaim.in-cloud.io/v1alpha1
+kind: ClusterClaimObserveResourceTemplate
+metadata:
+  name: e2e-cluster-client
+spec:
+  apiVersion: cluster.x-k8s.io/v1beta2
+  kind: Cluster
+  value: |
+    metadata:
+      labels:
+        cluster.x-k8s.io/cluster-name: {{ .ClusterClaim.metadata.name }}-client
+    spec:
+      paused: false
+      clusterNetwork:
+        apiServerPort: {{ .ClusterClaim.spec.client.network.kubeApiserverPort }}
+        pods:
+          cidrBlocks:
+          - {{ .ClusterClaim.spec.client.network.podCidr }}
+        services:
+          cidrBlocks:
+          - {{ .ClusterClaim.spec.client.network.serviceCidr }}
+---
+apiVersion: clusterclaim.in-cloud.io/v1alpha1
+kind: ClusterClaimObserveResourceTemplate
+metadata:
+  name: e2e-ccm
+spec:
+  apiVersion: controller.in-cloud.io/v1alpha1
+  kind: CcmCsrc
+  value: |
+    metadata:
+      labels:
+        xcluster.in-cloud.io/name: {{ .ClusterClaim.metadata.name }}
+    spec:
+      beget-ccm:
+        appSpec:
+          applications:
+            ccmInfra:
+              enabled: true
+            ccmClient:
+              enabled: {{ .ClientControlPlaneInitialized }}
+      beget-csrc:
+        appSpec:
+          applications:
+            csrcInfra:
+              enabled: true
+            csrcClient:
+              enabled: {{ .ClientControlPlaneInitialized }}

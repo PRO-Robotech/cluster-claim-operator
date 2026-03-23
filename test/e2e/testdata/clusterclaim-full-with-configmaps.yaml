@@ -1,0 +1,51 @@
+apiVersion: clusterclaim.in-cloud.io/v1alpha1
+kind: ClusterClaim
+metadata:
+  name: e2e-full-cm
+  namespace: e2e-test
+spec:
+  observeTemplateRef:
+    name: e2e-observe
+  certificateSetTemplateRef:
+    infra:
+      name: e2e-certset-infra
+    client:
+      name: e2e-certset-client
+  clusterTemplateRef:
+    infra:
+      name: e2e-cluster-infra
+    client:
+      name: e2e-cluster-client
+  ccmCsrTemplateRef:
+    name: e2e-ccm
+  configMapTemplateRef:
+    infra:
+      name: e2e-cm-infra
+    client:
+      name: e2e-cm-client
+  replicas: 1
+  configuration:
+    cpuCount: 4
+    diskSize: 51200
+    memory: 8192
+  infra:
+    role: customer/infra
+    paused: false
+    network:
+      serviceCidr: "10.96.0.0/12"
+      podCidr: "10.244.0.0/16"
+      clusterDNS: "10.96.0.10"
+      kubeApiserverPort: 6443
+    componentVersions:
+      kubernetes:
+        version: v1.34.4
+  client:
+    enabled: true
+    network:
+      serviceCidr: "10.96.0.0/12"
+      podCidr: "10.244.0.0/16"
+      clusterDNS: "10.96.0.10"
+      kubeApiserverPort: 26443
+    componentVersions:
+      kubernetes:
+        version: v1.35.2

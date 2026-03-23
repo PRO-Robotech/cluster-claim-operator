@@ -1,0 +1,5 @@
+## Append samples of your project ##
+resources:
+- clusterclaim_v1alpha1_clusterclaim.yaml
+- clusterclaim_v1alpha1_clusterclaimobserveresourcetemplate.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples
