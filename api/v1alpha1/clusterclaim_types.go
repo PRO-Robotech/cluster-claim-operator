@@ -150,6 +150,42 @@ type ClusterClaimSpec struct {
 	Client ClientSpec `json:"client"`
 }
 
+// ReplicaStatus contains replica count information mirrored from a CAPI Cluster.
+type ReplicaStatus struct {
+	// +optional
+	Replicas int32 `json:"replicas,omitempty"`
+	// +optional
+	ReadyReplicas int32 `json:"readyReplicas,omitempty"`
+	// +optional
+	AvailableReplicas int32 `json:"availableReplicas,omitempty"`
+	// +optional
+	DesiredReplicas int32 `json:"desiredReplicas,omitempty"`
+	// +optional
+	UpToDateReplicas int32 `json:"upToDateReplicas,omitempty"`
+}
+
+// ClusterStatusSummary mirrors status fields from a CAPI Cluster object.
+type ClusterStatusSummary struct {
+	// +listType=map
+	// +listMapKey=type
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	// +optional
+	Phase string `json:"phase,omitempty"`
+	// +optional
+	ControlPlane *ReplicaStatus `json:"controlPlane,omitempty"`
+	// +optional
+	Workers *ReplicaStatus `json:"workers,omitempty"`
+}
+
+// ClustersStatus holds status summaries for infra and client clusters.
+type ClustersStatus struct {
+	// +optional
+	Infra *ClusterStatusSummary `json:"infra,omitempty"`
+	// +optional
+	Client *ClusterStatusSummary `json:"client,omitempty"`
+}
+
 // ClusterClaimStatus defines the observed state of ClusterClaim.
 type ClusterClaimStatus struct {
 	// +optional
@@ -163,6 +199,9 @@ type ClusterClaimStatus struct {
 	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// +optional
+	Clusters *ClustersStatus `json:"clusters,omitempty"`
 }
 
 // +kubebuilder:object:root=true
