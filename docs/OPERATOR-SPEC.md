@@ -539,6 +539,66 @@ Step 9 — пропускается.
 
 ---
 
+## 6. Зеркалирование статусов кластеров
+
+Контроллер зеркалирует статусы CAPI Cluster объектов в `ClusterClaim.status.clusters` на **каждом** reconcile. Это позволяет наблюдать состояние кластеров через единый ClusterClaim без необходимости смотреть отдельные Cluster ресурсы.
+
+### 6.1. Маппинг статусов
+
+| Источник | Назначение |
+|----------|-----------|
+| `Cluster[infra].status.conditions` | `ClusterClaim.status.clusters.infra.conditions` |
+| `Cluster[infra].status.controlPlane` | `ClusterClaim.status.clusters.infra.controlPlane` |
+| `Cluster[infra].status.phase` | `ClusterClaim.status.clusters.infra.phase` |
+| `Cluster[client].status.conditions` | `ClusterClaim.status.clusters.client.conditions` |
+| `Cluster[client].status.phase` | `ClusterClaim.status.clusters.client.phase` |
+| `Cluster[client].status.workers` | `ClusterClaim.status.clusters.client.workers` |
+
+### 6.2. Структура
+
+```yaml
+status:
+  clusters:
+    infra:
+      phase: Provisioned
+      conditions:
+        - type: Available
+          status: "True"
+          reason: Available
+        - type: ControlPlaneInitialized
+          status: "True"
+          reason: Initialized
+        # ... все conditions из Cluster[infra]
+      controlPlane:
+        replicas: 1
+        readyReplicas: 1
+        availableReplicas: 1
+        desiredReplicas: 1
+        upToDateReplicas: 1
+    client:                          # только если client.enabled=true
+      phase: Provisioned
+      conditions:
+        - type: WorkersAvailable
+          status: "True"
+          reason: Available
+        # ... все conditions из Cluster[client]
+      workers:
+        replicas: 1
+        readyReplicas: 1
+        availableReplicas: 1
+        desiredReplicas: 1
+        upToDateReplicas: 1
+```
+
+### 6.3. Поведение
+
+- Статусы обновляются на **каждом** reconcile, не только при Phase=Ready.
+- Если Cluster ещё не создан — соответствующая секция `nil`.
+- `controlPlane` и `workers` — опциональны, заполняются только если присутствуют в статусе Cluster.
+- Все conditions копируются as-is (включая `lastTransitionTime`, `observedGeneration`).
+
+---
+
 ## Примеры
 
 Полные примеры ClusterClaim и всех шаблонов — в `docs/examples/`:

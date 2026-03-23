@@ -431,6 +431,15 @@ var _ = Describe("ClusterClaim Controller", func() {
 			Expect(ccm.GetLabels()).To(HaveKeyWithValue(clusterclaimv1alpha1.LabelClaimName, claim.Name))
 			Expect(ccm.GetOwnerReferences()).To(HaveLen(1))
 			Expect(ccm.GetOwnerReferences()[0].Kind).To(Equal("ClusterClaim"))
+
+			// 11. Verify Cluster[infra] status is mirrored into ClusterClaim.Status.Clusters.
+			Expect(finalClaim.Status.Clusters).NotTo(BeNil())
+			Expect(finalClaim.Status.Clusters.Infra).NotTo(BeNil())
+			Expect(finalClaim.Status.Clusters.Infra.ControlPlane).NotTo(BeNil())
+			Expect(finalClaim.Status.Clusters.Infra.ControlPlane.AvailableReplicas).To(Equal(int32(1)))
+			Expect(finalClaim.Status.Clusters.Infra.ControlPlane.DesiredReplicas).To(Equal(int32(1)))
+			// Client should be nil (client.enabled=false).
+			Expect(finalClaim.Status.Clusters.Client).To(BeNil())
 		})
 	})
 
@@ -882,6 +891,19 @@ spec:
 			Expect(clientCluster.GetLabels()).To(HaveKeyWithValue(clusterclaimv1alpha1.LabelClaimName, claim.Name))
 			Expect(clientCluster.GetOwnerReferences()).To(HaveLen(1))
 			Expect(clientCluster.GetOwnerReferences()[0].Kind).To(Equal("ClusterClaim"))
+
+			// Verify both cluster statuses are mirrored into ClusterClaim.Status.Clusters.
+			Expect(finalClaim.Status.Clusters).NotTo(BeNil())
+
+			Expect(finalClaim.Status.Clusters.Infra).NotTo(BeNil())
+			Expect(finalClaim.Status.Clusters.Infra.ControlPlane).NotTo(BeNil())
+			Expect(finalClaim.Status.Clusters.Infra.ControlPlane.AvailableReplicas).To(Equal(int32(1)))
+			Expect(finalClaim.Status.Clusters.Infra.ControlPlane.DesiredReplicas).To(Equal(int32(1)))
+
+			Expect(finalClaim.Status.Clusters.Client).NotTo(BeNil())
+			Expect(finalClaim.Status.Clusters.Client.ControlPlane).NotTo(BeNil())
+			Expect(finalClaim.Status.Clusters.Client.ControlPlane.AvailableReplicas).To(Equal(int32(1)))
+			Expect(finalClaim.Status.Clusters.Client.ControlPlane.DesiredReplicas).To(Equal(int32(1)))
 		})
 	})
 
