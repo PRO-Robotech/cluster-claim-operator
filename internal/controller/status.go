@@ -95,6 +95,19 @@ func extractClusterStatusSummary(ctx context.Context, cluster *unstructured.Unst
 	clusterName := cluster.GetName()
 	summary := &clusterclaimv1alpha1.ClusterStatusSummary{}
 
+	// ControlPlaneEndpoint (from spec, not status).
+	host, _, err := unstructured.NestedString(cluster.Object, "spec", "controlPlaneEndpoint", "host")
+	if err != nil {
+		logger.Error(err, "failed to read spec.controlPlaneEndpoint.host from Cluster", "cluster", clusterName)
+	}
+	summary.Host = host
+
+	port, _, err := unstructured.NestedInt64(cluster.Object, "spec", "controlPlaneEndpoint", "port")
+	if err != nil {
+		logger.Error(err, "failed to read spec.controlPlaneEndpoint.port from Cluster", "cluster", clusterName)
+	}
+	summary.Port = int32(port)
+
 	// Phase.
 	phase, _, err := unstructured.NestedString(cluster.Object, "status", "phase")
 	if err != nil {
