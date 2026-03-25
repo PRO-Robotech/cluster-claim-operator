@@ -166,6 +166,10 @@ type ReplicaStatus struct {
 
 // ClusterStatusSummary mirrors status fields from a CAPI Cluster object.
 type ClusterStatusSummary struct {
+	// +optional
+	Host string `json:"host,omitempty"`
+	// +optional
+	Port int32 `json:"port,omitempty"`
 	// +listType=map
 	// +listMapKey=type
 	// +optional
