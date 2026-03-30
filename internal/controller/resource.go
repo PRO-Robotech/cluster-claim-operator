@@ -48,13 +48,16 @@ func (r *ClusterClaimReconciler) ensureResource(
 	// 1. Fetch template (cluster-scoped).
 	var tmpl clusterclaimv1alpha1.ClusterClaimObserveResourceTemplate
 	if err := r.Get(ctx, client.ObjectKey{Name: templateRefName}, &tmpl); err != nil {
+		if apierrors.IsNotFound(err) {
+			return NewTerminalError(fmt.Errorf("fetch template %q: %w", templateRefName, err))
+		}
 		return fmt.Errorf("fetch template %q: %w", templateRefName, err)
 	}
 
 	// 2. Render template.
 	rendered, err := renderer.Render(tmpl.Spec.Value, tmplCtx)
 	if err != nil {
-		return fmt.Errorf("render template %q: %w", templateRefName, err)
+		return NewTerminalError(fmt.Errorf("render template %q: %w", templateRefName, err))
 	}
 
 	// 3. Build desired unstructured object.
@@ -68,7 +71,10 @@ func (r *ClusterClaimReconciler) ensureResource(
 	err = r.Get(ctx, client.ObjectKey{Name: resourceName, Namespace: namespace}, existing)
 	if apierrors.IsNotFound(err) {
 		logger.Info("creating resource", "gvk", gvk, "name", resourceName, "namespace", namespace)
-		return r.Create(ctx, desired)
+		if err := r.Create(ctx, desired); err != nil {
+			return classifyAPIError(fmt.Errorf("create resource %s/%s: %w", namespace, resourceName, err))
+		}
+		return nil
 	}
 	if err != nil {
 		return fmt.Errorf("get existing resource: %w", err)
@@ -82,7 +88,10 @@ func (r *ClusterClaimReconciler) ensureResource(
 	// Update: apply desired state to existing object (preserves resourceVersion, uid, etc).
 	applyDesiredToExisting(existing, desired, rendered)
 	logger.Info("updating resource", "gvk", gvk, "name", resourceName, "namespace", namespace)
-	return r.Update(ctx, existing)
+	if err := r.Update(ctx, existing); err != nil {
+		return classifyAPIError(fmt.Errorf("update resource %s/%s: %w", namespace, resourceName, err))
+	}
+	return nil
 }
 
 // buildDesiredResource creates the full unstructured object from template + rendered output.
