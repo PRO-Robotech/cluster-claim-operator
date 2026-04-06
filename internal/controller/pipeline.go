@@ -120,9 +120,17 @@ func (r *ClusterClaimReconciler) executePipeline(ctx context.Context, claim *clu
 	for _, s := range steps {
 		result, stepErr := s.fn(ctx, claim, &tmplCtx)
 		if stepErr != nil {
-			logger.Error(stepErr, "pipeline step failed", "step", s.name)
-			r.event(claim, corev1.EventTypeWarning, "StepFailed", "Step %s failed: %v", s.name, stepErr)
-			setFailed(claim, "StepFailed", fmt.Errorf("step %s: %w", s.name, stepErr))
+			wrappedErr := fmt.Errorf("step %s: %w", s.name, stepErr)
+			if IsTerminalError(stepErr) {
+				logger.Error(stepErr, "pipeline step failed (terminal)", "step", s.name)
+				r.event(claim, corev1.EventTypeWarning, "StepFailed", "Step %s failed (terminal): %v", s.name, stepErr)
+				setFailed(claim, "StepFailed", wrappedErr)
+				_ = r.updateStatusIfChanged(ctx, claim, oldStatus)
+				return ctrl.Result{}, nil
+			}
+			logger.Info("pipeline step failed (transient, will retry)", "step", s.name, "error", stepErr)
+			r.event(claim, corev1.EventTypeWarning, "StepRetrying", "Step %s failed (transient): %v", s.name, stepErr)
+			setCondition(claim, clusterclaimv1alpha1.ConditionReady, metav1.ConditionFalse, "StepRetrying", wrappedErr.Error())
 			_ = r.updateStatusIfChanged(ctx, claim, oldStatus)
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 		}
@@ -148,7 +156,7 @@ func (r *ClusterClaimReconciler) stepClusterClient(ctx context.Context, claim *c
 		return Proceed, nil
 	}
 	if claim.Spec.ClusterTemplateRef.Client == nil {
-		return Proceed, fmt.Errorf("client enabled but clusterTemplateRef.client not set")
+		return Proceed, NewTerminalErrorf("client enabled but clusterTemplateRef.client not set")
 	}
 	if err := r.ensureResource(ctx, claim, claim.Spec.ClusterTemplateRef.Client.Name, naming.ClusterName(claim.Name, "client"), claim.Namespace, *tmplCtx); err != nil {
 		return Proceed, err
@@ -313,7 +321,7 @@ func (r *ClusterClaimReconciler) stepCertificateSetClient(ctx context.Context, c
 	}
 
 	if claim.Spec.CertificateSetTemplateRef.Client == nil {
-		return Proceed, fmt.Errorf("client is enabled but certificateSetTemplateRef.client is not set")
+		return Proceed, NewTerminalErrorf("client is enabled but certificateSetTemplateRef.client is not set")
 	}
 
 	if err := r.ensureResource(ctx, claim, claim.Spec.CertificateSetTemplateRef.Client.Name, naming.CertificateSetName(claim.Name, "client"), claim.Namespace, *tmplCtx); err != nil {
@@ -431,13 +439,16 @@ func (r *ClusterClaimReconciler) applyRemoteConfigMap(
 	// Fetch template (cluster-scoped).
 	var tmpl clusterclaimv1alpha1.ClusterClaimObserveResourceTemplate
 	if err := r.Get(ctx, client.ObjectKey{Name: templateRefName}, &tmpl); err != nil {
+		if apierrors.IsNotFound(err) {
+			return NewTerminalError(fmt.Errorf("fetch template %q: %w", templateRefName, err))
+		}
 		return fmt.Errorf("fetch template %q: %w", templateRefName, err)
 	}
 
 	// Render template.
 	rendered, err := renderer.Render(tmpl.Spec.Value, tmplCtx)
 	if err != nil {
-		return fmt.Errorf("render template %q: %w", templateRefName, err)
+		return NewTerminalError(fmt.Errorf("render template %q: %w", templateRefName, err))
 	}
 
 	// Build ConfigMap with standard labels merged from rendered.
