@@ -291,8 +291,8 @@ spec:
                   clusters.
                 properties:
                   client:
-                    description: ClusterStatusSummary mirrors status fields from a
-                      CAPI Cluster object.
+                    description: ClusterStatusSummary mirrors status fields common
+                      to infra and client CAPI Cluster objects.
                     properties:
                       conditions:
                         items:
@@ -374,16 +374,6 @@ spec:
                             format: int32
                             type: integer
                         type: object
-                      controlPlaneVersion:
-                        description: |-
-                          ControlPlaneVersion mirrors spec.version and status.version from a KubeadmControlPlane object.
-                          During a version upgrade SpecVersion is the desired version and StatusVersion is the currently observed version.
-                        properties:
-                          specVersion:
-                            type: string
-                          statusVersion:
-                            type: string
-                        type: object
                       host:
                         type: string
                       phase:
@@ -413,8 +403,9 @@ spec:
                         type: object
                     type: object
                   infra:
-                    description: ClusterStatusSummary mirrors status fields from a
-                      CAPI Cluster object.
+                    description: |-
+                      InfraClusterStatusSummary extends ClusterStatusSummary with fields that are specific
+                      to infra clusters managed by KubeadmControlPlane.
                     properties:
                       conditions:
                         items:

@@ -173,7 +173,7 @@ type ControlPlaneVersion struct {
 	StatusVersion string `json:"statusVersion,omitempty"`
 }
 
-// ClusterStatusSummary mirrors status fields from a CAPI Cluster object.
+// ClusterStatusSummary mirrors status fields common to infra and client CAPI Cluster objects.
 type ClusterStatusSummary struct {
 	// +optional
 	Host string `json:"host,omitempty"`
@@ -189,6 +189,12 @@ type ClusterStatusSummary struct {
 	ControlPlane *ReplicaStatus `json:"controlPlane,omitempty"`
 	// +optional
 	Workers *ReplicaStatus `json:"workers,omitempty"`
+}
+
+// InfraClusterStatusSummary extends ClusterStatusSummary with fields that are specific
+// to infra clusters managed by KubeadmControlPlane.
+type InfraClusterStatusSummary struct {
+	ClusterStatusSummary `json:",inline"`
 	// +optional
 	ControlPlaneVersion *ControlPlaneVersion `json:"controlPlaneVersion,omitempty"`
 }
@@ -196,7 +202,7 @@ type ClusterStatusSummary struct {
 // ClustersStatus holds status summaries for infra and client clusters.
 type ClustersStatus struct {
 	// +optional
-	Infra *ClusterStatusSummary `json:"infra,omitempty"`
+	Infra *InfraClusterStatusSummary `json:"infra,omitempty"`
 	// +optional
 	Client *ClusterStatusSummary `json:"client,omitempty"`
 }
