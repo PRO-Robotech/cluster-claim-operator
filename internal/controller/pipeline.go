@@ -100,7 +100,7 @@ func (r *ClusterClaimReconciler) executePipeline(ctx context.Context, claim *clu
 	tmplCtx := renderer.BuildContext(claimUnstructured, infraCluster, clientCluster)
 
 	// Mirror Cluster statuses into ClusterClaim on every reconcile.
-	syncClusterStatuses(ctx, claim, infraCluster, clientCluster)
+	r.syncClusterStatuses(ctx, claim, infraCluster, clientCluster)
 
 	steps := []pipelineStep{
 		{"Application", r.stepApplication},

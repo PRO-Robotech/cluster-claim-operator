@@ -19,8 +19,9 @@ package controller
 import "k8s.io/apimachinery/pkg/runtime/schema"
 
 var (
-	ApplicationGVK    = schema.GroupVersionKind{Group: "argoproj.io", Version: "v1alpha1", Kind: "Application"}
-	CertificateSetGVK = schema.GroupVersionKind{Group: "in-cloud.io", Version: "v1alpha1", Kind: "CertificateSet"}
-	ClusterGVK        = schema.GroupVersionKind{Group: "cluster.x-k8s.io", Version: "v1beta2", Kind: "Cluster"}
-	CcmCsrcGVK        = schema.GroupVersionKind{Group: "controller.in-cloud.io", Version: "v1alpha1", Kind: "CcmCsrc"}
+	ApplicationGVK         = schema.GroupVersionKind{Group: "argoproj.io", Version: "v1alpha1", Kind: "Application"}
+	CertificateSetGVK      = schema.GroupVersionKind{Group: "in-cloud.io", Version: "v1alpha1", Kind: "CertificateSet"}
+	ClusterGVK             = schema.GroupVersionKind{Group: "cluster.x-k8s.io", Version: "v1beta2", Kind: "Cluster"}
+	CcmCsrcGVK             = schema.GroupVersionKind{Group: "controller.in-cloud.io", Version: "v1alpha1", Kind: "CcmCsrc"}
+	KubeadmControlPlaneGVK = schema.GroupVersionKind{Group: "controlplane.cluster.x-k8s.io", Version: "v1beta2", Kind: "KubeadmControlPlane"}
 )
