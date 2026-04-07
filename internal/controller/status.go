@@ -21,9 +21,11 @@ import (
 	"time"
 
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	clusterclaimv1alpha1 "github.com/PRO-Robotech/cluster-claim-operator/api/v1alpha1"
@@ -67,7 +69,7 @@ func setWaiting(claim *clusterclaimv1alpha1.ClusterClaim, condType, message stri
 // syncClusterStatuses mirrors Cluster[infra] and Cluster[client] status fields
 // into ClusterClaim.Status.Clusters. Called at the start of every pipeline execution.
 // Errors are logged as warnings but never stop the pipeline.
-func syncClusterStatuses(ctx context.Context, claim *clusterclaimv1alpha1.ClusterClaim, infraCluster, clientCluster *unstructured.Unstructured) {
+func (r *ClusterClaimReconciler) syncClusterStatuses(ctx context.Context, claim *clusterclaimv1alpha1.ClusterClaim, infraCluster, clientCluster *unstructured.Unstructured) {
 	if infraCluster == nil && clientCluster == nil {
 		return
 	}
@@ -80,11 +82,50 @@ func syncClusterStatuses(ctx context.Context, claim *clusterclaimv1alpha1.Cluste
 
 	if infraCluster != nil {
 		claim.Status.Clusters.Infra = extractClusterStatusSummary(ctx, infraCluster)
+		claim.Status.Clusters.Infra.ControlPlaneVersion = r.fetchControlPlaneVersion(ctx, infraCluster)
 		logger.V(1).Info("mirrored Cluster[infra] status", "phase", claim.Status.Clusters.Infra.Phase)
 	}
 	if clientCluster != nil {
 		claim.Status.Clusters.Client = extractClusterStatusSummary(ctx, clientCluster)
+		claim.Status.Clusters.Client.ControlPlaneVersion = r.fetchControlPlaneVersion(ctx, clientCluster)
 		logger.V(1).Info("mirrored Cluster[client] status", "phase", claim.Status.Clusters.Client.Phase)
+	}
+}
+
+// fetchControlPlaneVersion follows spec.controlPlaneRef from a CAPI Cluster to the KubeadmControlPlane
+// and extracts spec.version and status.version.
+func (r *ClusterClaimReconciler) fetchControlPlaneVersion(ctx context.Context, cluster *unstructured.Unstructured) *clusterclaimv1alpha1.ControlPlaneVersion {
+	logger := log.FromContext(ctx)
+	clusterName := cluster.GetName()
+
+	cpRefName, _, err := unstructured.NestedString(cluster.Object, "spec", "controlPlaneRef", "name")
+	if err != nil || cpRefName == "" {
+		return nil
+	}
+
+	cpRefNamespace, _, _ := unstructured.NestedString(cluster.Object, "spec", "controlPlaneRef", "namespace")
+	if cpRefNamespace == "" {
+		cpRefNamespace = cluster.GetNamespace()
+	}
+
+	kcp := &unstructured.Unstructured{}
+	kcp.SetGroupVersionKind(KubeadmControlPlaneGVK)
+	if err := r.Get(ctx, client.ObjectKey{Name: cpRefName, Namespace: cpRefNamespace}, kcp); err != nil {
+		if !apierrors.IsNotFound(err) {
+			logger.Error(err, "failed to fetch KubeadmControlPlane", "cluster", clusterName, "kcp", cpRefName)
+		}
+		return nil
+	}
+
+	specVersion, _, _ := unstructured.NestedString(kcp.Object, "spec", "version")
+	statusVersion, _, _ := unstructured.NestedString(kcp.Object, "status", "version")
+	if specVersion == "" && statusVersion == "" {
+		return nil
+	}
+
+	return &clusterclaimv1alpha1.ControlPlaneVersion{
+		SpecVersion:   specVersion,
+		StatusVersion: statusVersion,
 	}
 }
 
@@ -95,7 +136,6 @@ func extractClusterStatusSummary(ctx context.Context, cluster *unstructured.Unst
 	clusterName := cluster.GetName()
 	summary := &clusterclaimv1alpha1.ClusterStatusSummary{}
 
-	// ControlPlaneEndpoint (from spec, not status).
 	host, _, err := unstructured.NestedString(cluster.Object, "spec", "controlPlaneEndpoint", "host")
 	if err != nil {
 		logger.Error(err, "failed to read spec.controlPlaneEndpoint.host from Cluster", "cluster", clusterName)
@@ -108,7 +148,6 @@ func extractClusterStatusSummary(ctx context.Context, cluster *unstructured.Unst
 	}
 	summary.Port = int32(port)
 
-	// Phase.
 	phase, _, err := unstructured.NestedString(cluster.Object, "status", "phase")
 	if err != nil {
 		logger.Error(err, "failed to read status.phase from Cluster", "cluster", clusterName)

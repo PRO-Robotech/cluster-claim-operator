@@ -27,9 +27,15 @@ import (
 )
 
 var _ = Describe("syncClusterStatuses", func() {
+	var r *ClusterClaimReconciler
+
+	BeforeEach(func() {
+		r = &ClusterClaimReconciler{Client: k8sClient}
+	})
+
 	It("should be a no-op when both clusters are nil", func() {
 		claim := &clusterclaimv1alpha1.ClusterClaim{}
-		syncClusterStatuses(ctx, claim, nil, nil)
+		r.syncClusterStatuses(ctx, claim, nil, nil)
 		Expect(claim.Status.Clusters).To(BeNil())
 	})
 
@@ -66,7 +72,7 @@ var _ = Describe("syncClusterStatuses", func() {
 			},
 		}}
 
-		syncClusterStatuses(ctx, claim, infraCluster, nil)
+		r.syncClusterStatuses(ctx, claim, infraCluster, nil)
 
 		Expect(claim.Status.Clusters).NotTo(BeNil())
 		Expect(claim.Status.Clusters.Infra).NotTo(BeNil())
@@ -117,7 +123,7 @@ var _ = Describe("syncClusterStatuses", func() {
 			},
 		}}
 
-		syncClusterStatuses(ctx, claim, nil, clientCluster)
+		r.syncClusterStatuses(ctx, claim, nil, clientCluster)
 
 		Expect(claim.Status.Clusters).NotTo(BeNil())
 		Expect(claim.Status.Clusters.Infra).To(BeNil())
@@ -159,7 +165,7 @@ var _ = Describe("syncClusterStatuses", func() {
 			},
 		}}
 
-		syncClusterStatuses(ctx, claim, infraCluster, clientCluster)
+		r.syncClusterStatuses(ctx, claim, infraCluster, clientCluster)
 
 		Expect(claim.Status.Clusters.Infra).NotTo(BeNil())
 		Expect(claim.Status.Clusters.Infra.Phase).To(Equal("Provisioned"))
@@ -175,7 +181,7 @@ var _ = Describe("syncClusterStatuses", func() {
 
 		emptyCluster := &unstructured.Unstructured{Object: map[string]interface{}{}}
 
-		syncClusterStatuses(ctx, claim, emptyCluster, nil)
+		r.syncClusterStatuses(ctx, claim, emptyCluster, nil)
 
 		Expect(claim.Status.Clusters).NotTo(BeNil())
 		Expect(claim.Status.Clusters.Infra).NotTo(BeNil())
@@ -204,7 +210,7 @@ var _ = Describe("syncClusterStatuses", func() {
 			},
 		}}
 
-		syncClusterStatuses(ctx, claim, cluster, nil)
+		r.syncClusterStatuses(ctx, claim, cluster, nil)
 
 		Expect(claim.Status.Clusters.Infra.Conditions).To(HaveLen(1))
 		Expect(claim.Status.Clusters.Infra.Conditions[0].Type).To(Equal("Available"))
