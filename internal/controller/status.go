@@ -81,19 +81,21 @@ func (r *ClusterClaimReconciler) syncClusterStatuses(ctx context.Context, claim 
 	}
 
 	if infraCluster != nil {
-		claim.Status.Clusters.Infra = extractClusterStatusSummary(ctx, infraCluster)
-		claim.Status.Clusters.Infra.ControlPlaneVersion = r.fetchControlPlaneVersion(ctx, infraCluster)
+		claim.Status.Clusters.Infra = &clusterclaimv1alpha1.InfraClusterStatusSummary{
+			ClusterStatusSummary: *extractClusterStatusSummary(ctx, infraCluster),
+			ControlPlaneVersion:  r.fetchControlPlaneVersion(ctx, infraCluster),
+		}
 		logger.V(1).Info("mirrored Cluster[infra] status", "phase", claim.Status.Clusters.Infra.Phase)
 	}
 	if clientCluster != nil {
 		claim.Status.Clusters.Client = extractClusterStatusSummary(ctx, clientCluster)
-		claim.Status.Clusters.Client.ControlPlaneVersion = r.fetchControlPlaneVersion(ctx, clientCluster)
 		logger.V(1).Info("mirrored Cluster[client] status", "phase", claim.Status.Clusters.Client.Phase)
 	}
 }
 
-// fetchControlPlaneVersion follows spec.controlPlaneRef from a CAPI Cluster to the KubeadmControlPlane
-// and extracts spec.version and status.version.
+// fetchControlPlaneVersion follows spec.controlPlaneRef from the infra CAPI Cluster to the
+// KubeadmControlPlane and extracts spec.version and status.version. Returns nil if the reference
+// is missing, the KCP cannot be fetched, or neither version is set.
 func (r *ClusterClaimReconciler) fetchControlPlaneVersion(ctx context.Context, cluster *unstructured.Unstructured) *clusterclaimv1alpha1.ControlPlaneVersion {
 	logger := log.FromContext(ctx)
 	clusterName := cluster.GetName()
