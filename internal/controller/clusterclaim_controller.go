@@ -72,6 +72,7 @@ func (r *ClusterClaimReconciler) remoteNamespaceForClaim(claim *clusterclaimv1al
 // +kubebuilder:rbac:groups=cluster.x-k8s.io,resources=clusters,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=controlplane.cluster.x-k8s.io,resources=kubeadmcontrolplanes,verbs=get;list;watch
 // +kubebuilder:rbac:groups=controller.in-cloud.io,resources=ccmcsrcs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=vault.in-cloud.io,resources=vaultclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=clusterclaim.in-cloud.io,resources=clusterclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=clusterclaim.in-cloud.io,resources=clusterclaims/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=clusterclaim.in-cloud.io,resources=clusterclaims/finalizers,verbs=update
@@ -132,6 +133,21 @@ func (r *ClusterClaimReconciler) reconcileDelete(ctx context.Context, claim *clu
 	}
 
 	r.event(claim, corev1.EventTypeNormal, "DeletingResources", "Starting deletion of managed resources")
+
+	// 0. VaultClaim — must go before Cluster[infra]; vault-operator needs the kubeconfig for cleanup.
+	if claim.Spec.VaultClaimTemplateRef != nil {
+		vcName := naming.VaultClaimName(claim.Name)
+		if err := r.removeResourceFinalizer(ctx, VaultClaimGVK, vcName, claim.Namespace); err != nil {
+			return ctrl.Result{}, err
+		}
+		deleted, err := r.deleteAndWait(ctx, VaultClaimGVK, vcName, claim.Namespace)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if !deleted {
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
+	}
 
 	// 1. Delete remote ConfigMaps (ignore errors -- cluster may be unavailable).
 	r.deleteRemoteConfigMaps(ctx, claim)
@@ -289,6 +305,9 @@ func (r *ClusterClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	ccmObj := &unstructured.Unstructured{}
 	ccmObj.SetGroupVersionKind(CcmCsrcGVK)
 
+	vaultClaimObj := &unstructured.Unstructured{}
+	vaultClaimObj.SetGroupVersionKind(VaultClaimGVK)
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&clusterclaimv1alpha1.ClusterClaim{},
 			builder.WithPredicates(predicate.Or(
@@ -299,6 +318,7 @@ func (r *ClusterClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(certSetObj).
 		Owns(clusterObj).
 		Owns(ccmObj).
+		Owns(vaultClaimObj).
 		Watches(&clusterclaimv1alpha1.ClusterClaimObserveResourceTemplate{},
 			handler.EnqueueRequestsFromMapFunc(r.findClaimsForTemplate)).
 		Watches(&corev1.Secret{},
