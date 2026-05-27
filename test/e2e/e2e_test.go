@@ -70,12 +70,13 @@ var _ = Describe("Manager", Ordered, func() {
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
 
-		By("installing external dependency CRDs (Application, CertificateSet, Cluster, CcmCsrc)")
+		By("installing external dependency CRDs (Application, CertificateSet, Cluster, CcmCsrc, VaultClaim)")
 		for _, crdFile := range []string{
 			"testdata/crds/applications.argoproj.io.yaml",
 			"testdata/crds/certificatesets.in-cloud.io.yaml",
 			"testdata/crds/clusters.cluster.x-k8s.io.yaml",
 			"testdata/crds/ccmcsrcs.controller.in-cloud.io.yaml",
+			"testdata/crds/vaultclaims.vault.in-cloud.io.yaml",
 		} {
 			cmd = exec.Command("kubectl", "apply", "-f", crdFile)
 			_, err = utils.Run(cmd)
@@ -785,6 +786,154 @@ var _ = Describe("Manager", Ordered, func() {
 				cmd := exec.Command("kubectl", "get", "clusterclaim", claimName, "-n", testNs)
 				_, err := utils.Run(cmd)
 				g.Expect(err).To(HaveOccurred(), "ClusterClaim should be deleted")
+			}).Should(Succeed())
+		})
+	})
+
+	Context("ClusterClaim with VaultClaim integration", func() {
+		const (
+			testNs    = "e2e-test"
+			claimName = "e2e-vault"
+		)
+
+		BeforeAll(func() {
+			By("creating test namespace")
+			cmd := exec.Command("kubectl", "create", "ns", testNs)
+			_, _ = utils.Run(cmd) // ignore if exists
+
+			By("applying base e2e templates")
+			cmd = exec.Command("kubectl", "apply", "-f", "test/e2e/testdata/templates.yaml")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply e2e templates")
+
+			By("applying VaultClaim template")
+			cmd = exec.Command("kubectl", "apply", "-f", "test/e2e/testdata/template-vault.yaml")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply VaultClaim template")
+		})
+
+		AfterAll(func() {
+			cmd := exec.Command("kubectl", "delete", "clusterclaim", claimName, "-n", testNs, "--ignore-not-found", "--timeout=60s")
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "clusterclaimobserveresourcetemplate", "e2e-default-vault", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+		})
+
+		It("creates a VaultClaim and reaches Ready once its phase is patched", func() {
+			By("creating ClusterClaim with vaultClaimTemplateRef")
+			cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/testdata/clusterclaim-with-vault.yaml")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("driving Steps 1-7 (CertificateSet Ready, Cluster provisioned and CP initialized)")
+			progressToStep9(testNs, claimName)
+
+			By("verifying VaultClaim is created with owner reference and standard labels")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "vaultclaim", claimName, "-n", testNs)
+				_, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+			}).Should(Succeed())
+
+			ownerKind, err := kubectlGetJSONPath(testNs, "vaultclaim", claimName,
+				`{.metadata.ownerReferences[0].kind}`)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ownerKind).To(Equal("ClusterClaim"))
+
+			lblName, err := kubectlGetJSONPath(testNs, "vaultclaim", claimName,
+				`{.metadata.labels.clusterclaim\.in-cloud\.io/claim-name}`)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(lblName).To(Equal(claimName))
+
+			By("waiting for VaultClaimCreated=True on the ClusterClaim")
+			Eventually(func(g Gomega) {
+				status, err := kubectlGetJSONPath(testNs, "clusterclaim", claimName,
+					`{.status.conditions[?(@.type=="VaultClaimCreated")].status}`)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(status).To(Equal("True"))
+			}).Should(Succeed())
+
+			By("waiting for VaultClaimReady=False (Step 14 blocks until phase=Ready)")
+			Eventually(func(g Gomega) {
+				status, err := kubectlGetJSONPath(testNs, "clusterclaim", claimName,
+					`{.status.conditions[?(@.type=="VaultClaimReady")].status}`)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(status).To(Equal("False"))
+
+				phase, err := kubectlGetJSONPath(testNs, "clusterclaim", claimName, "{.status.phase}")
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(phase).To(Equal("WaitingDependency"))
+			}).Should(Succeed())
+
+			By("verifying status.vault mirror is populated")
+			vaultName, err := kubectlGetJSONPath(testNs, "clusterclaim", claimName, "{.status.vault.name}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(vaultName).To(Equal(claimName))
+
+			By("patching VaultClaim.status.phase=Ready to simulate vault-operator finishing")
+			patchPhase := `{"status":{"phase":"Ready"}}`
+			cmd = exec.Command("kubectl", "patch", "vaultclaim", claimName,
+				"-n", testNs, "--subresource=status", "--type=merge", "-p", patchPhase)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("waiting for ClusterClaim Phase=Ready")
+			Eventually(func(g Gomega) {
+				phase, err := kubectlGetJSONPath(testNs, "clusterclaim", claimName, "{.status.phase}")
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(phase).To(Equal("Ready"))
+			}).Should(Succeed())
+
+			By("verifying VaultClaimReady=True and status.vault.ready=true")
+			status, err := kubectlGetJSONPath(testNs, "clusterclaim", claimName,
+				`{.status.conditions[?(@.type=="VaultClaimReady")].status}`)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(status).To(Equal("True"))
+
+			ready, err := kubectlGetJSONPath(testNs, "clusterclaim", claimName, "{.status.vault.ready}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ready).To(Equal("true"))
+
+			vaultPhase, err := kubectlGetJSONPath(testNs, "clusterclaim", claimName, "{.status.vault.phase}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(vaultPhase).To(Equal("Ready"))
+
+			By("attaching a stand-in finalizer (no real vault-operator to hold the VaultClaim)")
+			cmd = exec.Command("kubectl", "patch", "vaultclaim", claimName,
+				"-n", testNs, "--type=json", "-p",
+				`[{"op":"add","path":"/metadata/finalizers/-","value":"e2e.test/hold"}]`)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("triggering deletion: the controller must remove VaultClaim before CcmCsrc/Clusters")
+			cmd = exec.Command("kubectl", "delete", "clusterclaim", claimName, "-n", testNs, "--wait=false")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying VaultClaim acquires a deletionTimestamp and CcmCsrc is still around")
+			Eventually(func(g Gomega) {
+				ts, _ := kubectlGetJSONPath(testNs, "vaultclaim", claimName, "{.metadata.deletionTimestamp}")
+				g.Expect(ts).NotTo(BeEmpty())
+			}).Should(Succeed())
+
+			ccmExists := func() bool {
+				cmd := exec.Command("kubectl", "get", "ccmcsrc", claimName, "-n", testNs)
+				_, err := utils.Run(cmd)
+				return err == nil
+			}
+			Expect(ccmExists()).To(BeTrue(), "CcmCsrc must still exist while reverse-step 0 holds")
+
+			By("stripping the stand-in finalizer to let the VaultClaim be removed (vault-operator simulation)")
+			cmd = exec.Command("kubectl", "patch", "vaultclaim", claimName,
+				"-n", testNs, "--type=merge", "-p", `{"metadata":{"finalizers":[]}}`)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("waiting for ClusterClaim to be fully gone")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "clusterclaim", claimName, "-n", testNs)
+				_, err := utils.Run(cmd)
+				g.Expect(err).To(HaveOccurred())
 			}).Should(Succeed())
 		})
 	})
