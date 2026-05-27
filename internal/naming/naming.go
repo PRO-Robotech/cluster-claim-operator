@@ -49,3 +49,8 @@ func ConfigMapName(configType string) string {
 func KubeconfigSecretName(claimName string) string {
 	return claimName + "-infra-kubeconfig"
 }
+
+// VaultClaimName returns the name for the VaultClaim resource (1:1 with ClusterClaim).
+func VaultClaimName(claimName string) string {
+	return claimName
+}

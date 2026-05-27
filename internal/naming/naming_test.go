@@ -125,3 +125,20 @@ func TestKubeconfigSecretName(t *testing.T) {
 		})
 	}
 }
+
+func TestVaultClaimName(t *testing.T) {
+	tests := []struct {
+		name      string
+		claimName string
+		want      string
+	}{
+		{"simple name", "ec8a00", "ec8a00"},
+		{"longer name", "my-cluster-claim", "my-cluster-claim"},
+		{"empty name", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, VaultClaimName(tt.claimName))
+		})
+	}
+}

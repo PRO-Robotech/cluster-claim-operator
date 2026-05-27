@@ -34,6 +34,7 @@ const (
 	indexCcmCsrTemplateRef          = "spec.ccmCsrTemplateRef.name"
 	indexConfigMapInfraTemplateRef  = "spec.configMapTemplateRef.infra.name"
 	indexConfigMapClientTemplateRef = "spec.configMapTemplateRef.client.name"
+	indexVaultClaimTemplateRef      = "spec.vaultClaimTemplateRef.name"
 )
 
 // allIndexFields returns the list of all templateRef index field names.
@@ -47,6 +48,7 @@ func allIndexFields() []string {
 		indexCcmCsrTemplateRef,
 		indexConfigMapInfraTemplateRef,
 		indexConfigMapClientTemplateRef,
+		indexVaultClaimTemplateRef,
 	}
 }
 
@@ -126,6 +128,16 @@ func SetupIndexers(mgr ctrl.Manager) error {
 					return nil
 				}
 				return []string{claim.Spec.ConfigMapTemplateRef.Client.Name}
+			},
+		},
+		{
+			field: indexVaultClaimTemplateRef,
+			fn: func(obj client.Object) []string {
+				claim := obj.(*clusterclaimv1alpha1.ClusterClaim)
+				if claim.Spec.VaultClaimTemplateRef == nil {
+					return nil
+				}
+				return []string{claim.Spec.VaultClaimTemplateRef.Name}
 			},
 		},
 	}
