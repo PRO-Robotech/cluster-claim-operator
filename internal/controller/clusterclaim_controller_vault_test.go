@@ -206,6 +206,40 @@ var _ = Describe("ClusterClaim VaultClaim integration", func() {
 		})
 	})
 
+	Context("template has wrong GVK", func() {
+		It("fails the claim with a terminal error pointing at the typo", func() {
+			wrong := newTestTemplate("wrong-vault-gvk", "controller.in-cloud.io/v1alpha1", "VaultClaim", `
+spec:
+  vaultConfigRef:
+    name: default
+`)
+			Expect(k8sClient.Create(ctx, wrong)).To(Succeed())
+			defer func() { _ = k8sClient.Delete(ctx, wrong) }()
+
+			claim := newTestClusterClaim("vc-wrong-gvk", ns.Name)
+			claim.Spec.VaultClaimTemplateRef = &clusterclaimv1alpha1.TemplateRef{Name: "wrong-vault-gvk"}
+			Expect(k8sClient.Create(ctx, claim)).To(Succeed())
+
+			claimKey := types.NamespacedName{Name: claim.Name, Namespace: ns.Name}
+			driveInfraReady(claim.Name, ns.Name)
+
+			Eventually(func(g Gomega) {
+				var fetched clusterclaimv1alpha1.ClusterClaim
+				g.Expect(k8sClient.Get(ctx, claimKey, &fetched)).To(Succeed())
+				g.Expect(fetched.Status.Phase).To(Equal(clusterclaimv1alpha1.PhaseFailed))
+
+				for _, c := range fetched.Status.Conditions {
+					if c.Type == clusterclaimv1alpha1.ConditionReady {
+						g.Expect(c.Message).To(ContainSubstring("controller.in-cloud.io/v1alpha1"))
+						g.Expect(c.Message).To(ContainSubstring("vault.in-cloud.io/v1alpha1"))
+						return
+					}
+				}
+				g.Expect(true).To(BeFalse(), "no Ready condition found")
+			}).WithTimeout(timeout).WithPolling(polling).Should(Succeed())
+		})
+	})
+
 	Context("vaultClaimTemplateRef not set", func() {
 		It("skips VaultClaim steps entirely and reaches Ready", func() {
 			claim := newTestClusterClaim("vc-skip", ns.Name)

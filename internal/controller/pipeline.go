@@ -369,8 +369,22 @@ func (r *ClusterClaimReconciler) stepEnsureVaultClaim(ctx context.Context, claim
 	if claim.Spec.VaultClaimTemplateRef == nil {
 		return Proceed, nil
 	}
+	tmplName := claim.Spec.VaultClaimTemplateRef.Name
+	var tmpl clusterclaimv1alpha1.ClusterClaimObserveResourceTemplate
+	if err := r.Get(ctx, client.ObjectKey{Name: tmplName}, &tmpl); err != nil {
+		if apierrors.IsNotFound(err) {
+			return Proceed, NewTerminalErrorf("VaultClaim template %q not found", tmplName)
+		}
+		return Proceed, fmt.Errorf("get VaultClaim template %q: %w", tmplName, err)
+	}
+	wantAPI := VaultClaimGVK.GroupVersion().String()
+	if tmpl.Spec.APIVersion != wantAPI || tmpl.Spec.Kind != VaultClaimGVK.Kind {
+		return Proceed, NewTerminalErrorf(
+			"VaultClaim template %q renders %s/%s but expected %s/%s",
+			tmplName, tmpl.Spec.APIVersion, tmpl.Spec.Kind, wantAPI, VaultClaimGVK.Kind)
+	}
 	name := naming.VaultClaimName(claim.Name)
-	if err := r.ensureResource(ctx, claim, claim.Spec.VaultClaimTemplateRef.Name, name, claim.Namespace, *tmplCtx); err != nil {
+	if err := r.ensureResource(ctx, claim, tmplName, name, claim.Namespace, *tmplCtx); err != nil {
 		return Proceed, err
 	}
 	if err := r.ensureResourceFinalizer(ctx, VaultClaimGVK, name, claim.Namespace); err != nil {
