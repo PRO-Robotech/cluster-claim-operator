@@ -77,7 +77,7 @@ func (r *ClusterClaimReconciler) ensureResource(
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("get existing resource: %w", err)
+		return classifyAPIError(fmt.Errorf("get existing resource: %w", err))
 	}
 
 	// Check if update is needed before calling the API.
