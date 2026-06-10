@@ -42,6 +42,8 @@ const (
 	ConditionCcmCsrcCreated        = "CcmCsrcCreated"
 	ConditionRemoteConfigApplied   = "RemoteConfigApplied"
 	ConditionClientCPReady         = "ClientCPReady"
+	ConditionVaultClaimCreated     = "VaultClaimCreated"
+	ConditionVaultClaimReady       = "VaultClaimReady"
 	ConditionPaused                = "Paused"
 )
 
@@ -134,6 +136,9 @@ type ClusterClaimSpec struct {
 	// +optional
 	ConfigMapTemplateRef *DualTemplateRef `json:"configMapTemplateRef,omitempty"`
 
+	// +optional
+	VaultClaimTemplateRef *TemplateRef `json:"vaultClaimTemplateRef,omitempty"`
+
 	// Cluster parameters.
 
 	// +kubebuilder:validation:Minimum=1
@@ -207,6 +212,20 @@ type ClustersStatus struct {
 	Client *ClusterStatusSummary `json:"client,omitempty"`
 }
 
+// VaultStatusSummary mirrors selected status fields from the associated VaultClaim.
+type VaultStatusSummary struct {
+	// +optional
+	Name string `json:"name,omitempty"`
+	// +optional
+	Phase string `json:"phase,omitempty"`
+	// +optional
+	Ready bool `json:"ready,omitempty"`
+	// +listType=map
+	// +listMapKey=type
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
 // ClusterClaimStatus defines the observed state of ClusterClaim.
 type ClusterClaimStatus struct {
 	// +optional
@@ -223,6 +242,9 @@ type ClusterClaimStatus struct {
 
 	// +optional
 	Clusters *ClustersStatus `json:"clusters,omitempty"`
+
+	// +optional
+	Vault *VaultStatusSummary `json:"vault,omitempty"`
 }
 
 // +kubebuilder:object:root=true

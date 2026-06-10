@@ -101,6 +101,7 @@ func (r *ClusterClaimReconciler) executePipeline(ctx context.Context, claim *clu
 
 	// Mirror Cluster statuses into ClusterClaim on every reconcile.
 	r.syncClusterStatuses(ctx, claim, infraCluster, clientCluster)
+	r.mirrorVaultStatus(ctx, claim)
 
 	steps := []pipelineStep{
 		{"Application", r.stepApplication},
@@ -110,11 +111,13 @@ func (r *ClusterClaimReconciler) executePipeline(ctx context.Context, claim *clu
 		{"WaitInfraProvisioned", r.stepWaitInfraProvisioned},
 		{"CertificateSetClient", r.stepCertificateSetClient},
 		{"WaitInfraCPReady", r.stepWaitInfraCPReady},
+		{"EnsureVaultClaim", r.stepEnsureVaultClaim},
 		{"CcmCsrc", r.stepCcmCsrc},
 		{"RemoteConfigMaps", r.stepRemoteConfigMaps},
 		{"ClusterClient", r.stepClusterClient},
 		{"WaitClientCPReady", r.stepWaitClientCPReady},
 		{"CcmCsrcUpdate", r.stepCcmCsrcUpdate},
+		{"WaitVaultClaim", r.stepWaitVaultClaim},
 	}
 
 	for _, s := range steps {
@@ -360,7 +363,61 @@ func (r *ClusterClaimReconciler) stepWaitInfraCPReady(ctx context.Context, claim
 	return Proceed, nil
 }
 
-// stepCcmCsrc creates or updates the CcmCsrc resource (Step 8).
+// stepEnsureVaultClaim creates or updates the VaultClaim (Step 8). Skipped when
+// vaultClaimTemplateRef is nil.
+func (r *ClusterClaimReconciler) stepEnsureVaultClaim(ctx context.Context, claim *clusterclaimv1alpha1.ClusterClaim, tmplCtx *renderer.TemplateContext) (StepResult, error) {
+	if claim.Spec.VaultClaimTemplateRef == nil {
+		return Proceed, nil
+	}
+	tmplName := claim.Spec.VaultClaimTemplateRef.Name
+	var tmpl clusterclaimv1alpha1.ClusterClaimObserveResourceTemplate
+	if err := r.Get(ctx, client.ObjectKey{Name: tmplName}, &tmpl); err != nil {
+		if apierrors.IsNotFound(err) {
+			return Proceed, NewTerminalErrorf("VaultClaim template %q not found", tmplName)
+		}
+		return Proceed, fmt.Errorf("get VaultClaim template %q: %w", tmplName, err)
+	}
+	wantAPI := VaultClaimGVK.GroupVersion().String()
+	if tmpl.Spec.APIVersion != wantAPI || tmpl.Spec.Kind != VaultClaimGVK.Kind {
+		return Proceed, NewTerminalErrorf(
+			"VaultClaim template %q renders %s/%s but expected %s/%s",
+			tmplName, tmpl.Spec.APIVersion, tmpl.Spec.Kind, wantAPI, VaultClaimGVK.Kind)
+	}
+	name := naming.VaultClaimName(claim.Name)
+	if err := r.ensureResource(ctx, claim, tmplName, name, claim.Namespace, *tmplCtx); err != nil {
+		return Proceed, err
+	}
+	if err := r.ensureResourceFinalizer(ctx, VaultClaimGVK, name, claim.Namespace); err != nil {
+		return Proceed, err
+	}
+	r.event(claim, corev1.EventTypeNormal, "CreatedVaultClaim", "VaultClaim %s created", name)
+	setCondition(claim, clusterclaimv1alpha1.ConditionVaultClaimCreated, metav1.ConditionTrue, "Created", "VaultClaim created/updated")
+	return Proceed, nil
+}
+
+// stepWaitVaultClaim waits for VaultClaim.status.phase == "Ready" (Step 14).
+// Skipped when vaultClaimTemplateRef is nil.
+func (r *ClusterClaimReconciler) stepWaitVaultClaim(ctx context.Context, claim *clusterclaimv1alpha1.ClusterClaim, _ *renderer.TemplateContext) (StepResult, error) {
+	if claim.Spec.VaultClaimTemplateRef == nil {
+		return Proceed, nil
+	}
+	name := naming.VaultClaimName(claim.Name)
+	vc, err := r.getResource(ctx, VaultClaimGVK, name, claim.Namespace)
+	if err != nil {
+		return Proceed, fmt.Errorf("get VaultClaim: %w", err)
+	}
+	phase, _, _ := unstructured.NestedString(vc.Object, "status", "phase")
+	if phase != clusterclaimv1alpha1.PhaseReady {
+		setWaiting(claim, clusterclaimv1alpha1.ConditionVaultClaimReady,
+			fmt.Sprintf("Waiting for VaultClaim to reach Ready (current phase: %q)", phase))
+		return Wait, nil
+	}
+	r.event(claim, corev1.EventTypeNormal, "VaultClaimReady", "VaultClaim %s is Ready", name)
+	setCondition(claim, clusterclaimv1alpha1.ConditionVaultClaimReady, metav1.ConditionTrue, "Ready", "VaultClaim phase=Ready")
+	return Proceed, nil
+}
+
+// stepCcmCsrc creates or updates the CcmCsrc resource.
 func (r *ClusterClaimReconciler) stepCcmCsrc(ctx context.Context, claim *clusterclaimv1alpha1.ClusterClaim, tmplCtx *renderer.TemplateContext) (StepResult, error) {
 	if err := r.ensureResource(ctx, claim, claim.Spec.CcmCsrTemplateRef.Name, naming.CcmCsrcName(claim.Name), claim.Namespace, *tmplCtx); err != nil {
 		return Proceed, err

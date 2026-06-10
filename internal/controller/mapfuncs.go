@@ -29,7 +29,8 @@ import (
 
 // findClaimsForTemplate returns reconcile requests for all ClusterClaims that
 // reference the given ClusterClaimObserveResourceTemplate. It queries each of
-// the 8 templateRef field indexes and deduplicates results.
+// the templateRef field indexes registered in allIndexFields and deduplicates
+// results.
 func (r *ClusterClaimReconciler) findClaimsForTemplate(ctx context.Context, obj client.Object) []reconcile.Request {
 	logger := log.FromContext(ctx)
 	templateName := obj.GetName()

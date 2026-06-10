@@ -66,6 +66,64 @@ func setWaiting(claim *clusterclaimv1alpha1.ClusterClaim, condType, message stri
 	setCondition(claim, condType, metav1.ConditionFalse, "WaitingDependency", message)
 }
 
+// mirrorVaultStatus mirrors VaultClaim phase and conditions into ClusterClaim.Status.Vault.
+// Errors are logged but never stop the pipeline.
+func (r *ClusterClaimReconciler) mirrorVaultStatus(ctx context.Context, claim *clusterclaimv1alpha1.ClusterClaim) {
+	if claim.Spec.VaultClaimTemplateRef == nil {
+		claim.Status.Vault = nil
+		return
+	}
+
+	logger := log.FromContext(ctx)
+	name := claim.Name
+	vc := &unstructured.Unstructured{}
+	vc.SetGroupVersionKind(VaultClaimGVK)
+	if err := r.Get(ctx, client.ObjectKey{Name: name, Namespace: claim.Namespace}, vc); err != nil {
+		if apierrors.IsNotFound(err) {
+			claim.Status.Vault = &clusterclaimv1alpha1.VaultStatusSummary{Name: name}
+			return
+		}
+		logger.Error(err, "failed to fetch VaultClaim for status mirror", "name", name)
+		return
+	}
+
+	phase, _, _ := unstructured.NestedString(vc.Object, "status", "phase")
+	summary := &clusterclaimv1alpha1.VaultStatusSummary{
+		Name:  name,
+		Phase: phase,
+		Ready: phase == clusterclaimv1alpha1.PhaseReady,
+	}
+
+	if conds, found, _ := unstructured.NestedSlice(vc.Object, "status", "conditions"); found {
+		for _, c := range conds {
+			cond, ok := c.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			mc := metav1.Condition{}
+			mc.Type, _, _ = unstructured.NestedString(cond, "type")
+			if mc.Type == "" {
+				continue
+			}
+			statusStr, _, _ := unstructured.NestedString(cond, "status")
+			mc.Status = metav1.ConditionStatus(statusStr)
+			mc.Reason, _, _ = unstructured.NestedString(cond, "reason")
+			mc.Message, _, _ = unstructured.NestedString(cond, "message")
+			obsGen, _, _ := unstructured.NestedInt64(cond, "observedGeneration")
+			mc.ObservedGeneration = obsGen
+			lastTransStr, _, _ := unstructured.NestedString(cond, "lastTransitionTime")
+			if lastTransStr != "" {
+				if t, parseErr := time.Parse(time.RFC3339, lastTransStr); parseErr == nil {
+					mc.LastTransitionTime = metav1.NewTime(t)
+				}
+			}
+			summary.Conditions = append(summary.Conditions, mc)
+		}
+	}
+
+	claim.Status.Vault = summary
+}
+
 // syncClusterStatuses mirrors Cluster[infra] and Cluster[client] status fields
 // into ClusterClaim.Status.Clusters. Called at the start of every pipeline execution.
 // Errors are logged as warnings but never stop the pipeline.

@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 )
 
 // TerminalError wraps an error to indicate it is non-recoverable.
@@ -59,7 +60,7 @@ func classifyAPIError(err error) error {
 	if err == nil {
 		return nil
 	}
-	if apierrors.IsInvalid(err) || apierrors.IsForbidden(err) {
+	if apierrors.IsInvalid(err) || apierrors.IsForbidden(err) || meta.IsNoMatchError(err) {
 		return NewTerminalError(err)
 	}
 	return err
