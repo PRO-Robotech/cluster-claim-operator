@@ -65,6 +65,7 @@ func (r *ClusterClaimReconciler) executePipeline(ctx context.Context, claim *clu
 	logger := log.FromContext(ctx)
 	oldStatus := claim.Status.DeepCopy()
 	setPhase(claim, clusterclaimv1alpha1.PhaseProvisioning)
+	clearPausedCondition(claim)
 
 	// Convert typed claim to unstructured for template context.
 	claimUnstructured, err := toUnstructured(claim, r.Scheme)

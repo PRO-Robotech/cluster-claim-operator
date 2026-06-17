@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"reflect"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -27,14 +26,15 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	clusterclaimv1alpha1 "github.com/PRO-Robotech/cluster-claim-operator/api/v1alpha1"
 	"github.com/PRO-Robotech/cluster-claim-operator/internal/labels"
 	"github.com/PRO-Robotech/cluster-claim-operator/internal/renderer"
 )
 
-// ensureResource fetches a template, renders it, and creates or updates the target resource.
+const fieldManager = "cluster-claim-operator"
+
+// ensureResource renders templateRefName and applies the result via server-side apply.
 func (r *ClusterClaimReconciler) ensureResource(
 	ctx context.Context,
 	claim *clusterclaimv1alpha1.ClusterClaim,
@@ -43,9 +43,6 @@ func (r *ClusterClaimReconciler) ensureResource(
 	namespace string,
 	tmplCtx renderer.TemplateContext,
 ) error {
-	logger := log.FromContext(ctx)
-
-	// 1. Fetch template (cluster-scoped).
 	var tmpl clusterclaimv1alpha1.ClusterClaimObserveResourceTemplate
 	if err := r.Get(ctx, client.ObjectKey{Name: templateRefName}, &tmpl); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -54,42 +51,15 @@ func (r *ClusterClaimReconciler) ensureResource(
 		return fmt.Errorf("fetch template %q: %w", templateRefName, err)
 	}
 
-	// 2. Render template.
 	rendered, err := renderer.Render(tmpl.Spec.Value, tmplCtx)
 	if err != nil {
 		return NewTerminalError(fmt.Errorf("render template %q: %w", templateRefName, err))
 	}
 
-	// 3. Build desired unstructured object.
 	desired := buildDesiredResource(claim, &tmpl, rendered, resourceName, namespace)
 
-	// 4. Create or Update.
-	gvk := schema.FromAPIVersionAndKind(tmpl.Spec.APIVersion, tmpl.Spec.Kind)
-
-	existing := &unstructured.Unstructured{}
-	existing.SetGroupVersionKind(gvk)
-	err = r.Get(ctx, client.ObjectKey{Name: resourceName, Namespace: namespace}, existing)
-	if apierrors.IsNotFound(err) {
-		logger.Info("creating resource", "gvk", gvk, "name", resourceName, "namespace", namespace)
-		if err := r.Create(ctx, desired); err != nil {
-			return classifyAPIError(fmt.Errorf("create resource %s/%s: %w", namespace, resourceName, err))
-		}
-		return nil
-	}
-	if err != nil {
-		return classifyAPIError(fmt.Errorf("get existing resource: %w", err))
-	}
-
-	// Check if update is needed before calling the API.
-	if !resourceNeedsUpdate(existing, desired, rendered) {
-		return nil
-	}
-
-	// Update: apply desired state to existing object (preserves resourceVersion, uid, etc).
-	applyDesiredToExisting(existing, desired, rendered)
-	logger.Info("updating resource", "gvk", gvk, "name", resourceName, "namespace", namespace)
-	if err := r.Update(ctx, existing); err != nil {
-		return classifyAPIError(fmt.Errorf("update resource %s/%s: %w", namespace, resourceName, err))
+	if err := r.Patch(ctx, desired, client.Apply, client.FieldOwner(fieldManager), client.ForceOwnership); err != nil {
+		return classifyAPIError(fmt.Errorf("apply resource %s/%s: %w", namespace, resourceName, err))
 	}
 	return nil
 }
@@ -138,89 +108,6 @@ func buildDesiredResource(
 	}
 
 	return obj
-}
-
-// applyDesiredToExisting updates the existing resource with desired state.
-// It merges rendered spec/data into existing rather than replacing, so that
-// fields set by external controllers (e.g. controlPlaneEndpoint by CAPI) are preserved.
-func applyDesiredToExisting(existing, desired *unstructured.Unstructured, rendered map[string]interface{}) {
-	existing.SetLabels(desired.GetLabels())
-	existing.SetAnnotations(desired.GetAnnotations())
-	existing.SetOwnerReferences(desired.GetOwnerReferences())
-
-	if spec, ok := rendered["spec"]; ok {
-		if specMap, ok := spec.(map[string]interface{}); ok {
-			mergeNestedMap(existing.Object, specMap, "spec")
-		} else {
-			_ = unstructured.SetNestedField(existing.Object, spec, "spec")
-		}
-	}
-	if data, ok := rendered["data"]; ok {
-		if dataMap, ok := data.(map[string]interface{}); ok {
-			mergeNestedMap(existing.Object, dataMap, "data")
-		} else {
-			_ = unstructured.SetNestedField(existing.Object, data, "data")
-		}
-	}
-}
-
-// mergeNestedMap merges src into the nested map at the given path in dst.
-// Top-level keys from src overwrite keys in the existing map; keys not present in src are preserved.
-func mergeNestedMap(dst map[string]interface{}, src map[string]interface{}, fields ...string) {
-	existing, _, _ := unstructured.NestedMap(dst, fields...)
-	if existing == nil {
-		existing = make(map[string]interface{})
-	}
-	for k, v := range src {
-		existing[k] = v
-	}
-	_ = unstructured.SetNestedField(dst, existing, fields...)
-}
-
-// resourceNeedsUpdate compares labels, annotations, ownerReferences, spec, and data
-// between an existing resource and the desired state. Returns true if an update is needed.
-// For spec and data, only keys present in rendered are compared (merge semantics).
-func resourceNeedsUpdate(existing, desired *unstructured.Unstructured, rendered map[string]interface{}) bool {
-	if !reflect.DeepEqual(existing.GetLabels(), desired.GetLabels()) {
-		return true
-	}
-	if !reflect.DeepEqual(existing.GetAnnotations(), desired.GetAnnotations()) {
-		return true
-	}
-	if !reflect.DeepEqual(existing.GetOwnerReferences(), desired.GetOwnerReferences()) {
-		return true
-	}
-	if spec, ok := rendered["spec"]; ok {
-		if nestedMapKeysDiffer(existing.Object, spec, "spec") {
-			return true
-		}
-	}
-	if data, ok := rendered["data"]; ok {
-		if nestedMapKeysDiffer(existing.Object, data, "data") {
-			return true
-		}
-	}
-	return false
-}
-
-// nestedMapKeysDiffer checks whether the rendered keys differ from what's in existing.
-// Keys in existing that are not in rendered are ignored (set by external controllers).
-func nestedMapKeysDiffer(existingObj map[string]interface{}, rendered interface{}, fields ...string) bool {
-	renderedMap, ok := rendered.(map[string]interface{})
-	if !ok {
-		existingVal, _, _ := unstructured.NestedFieldNoCopy(existingObj, fields...)
-		return !reflect.DeepEqual(existingVal, rendered)
-	}
-	existingMap, _, _ := unstructured.NestedMap(existingObj, fields...)
-	if existingMap == nil {
-		return len(renderedMap) > 0
-	}
-	for k, v := range renderedMap {
-		if !reflect.DeepEqual(existingMap[k], v) {
-			return true
-		}
-	}
-	return false
 }
 
 // extractStringMap extracts a map[string]string from a nested path in the rendered output.
