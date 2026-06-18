@@ -17,153 +17,103 @@ limitations under the License.
 package controller
 
 import (
+	"reflect"
 	"testing"
 
+	clusterclaimv1alpha1 "github.com/PRO-Robotech/cluster-claim-operator/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-func TestResourceNeedsUpdate(t *testing.T) {
-	baseLabels := map[string]string{"app": "test", "env": "prod"}
-	baseAnnotations := map[string]string{"note": "value"}
-	baseOwnerRefs := []metav1.OwnerReference{
-		{APIVersion: "v1", Kind: "ClusterClaim", Name: "claim1", UID: "uid1"},
+func TestBuildDesiredResource(t *testing.T) {
+	claim := &clusterclaimv1alpha1.ClusterClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "claim1",
+			Namespace: "ns1",
+			UID:       "uid-claim1",
+		},
 	}
-	baseSpec := map[string]interface{}{
-		"replicas": int64(3),
-		"paused":   false,
+	tmpl := &clusterclaimv1alpha1.ClusterClaimObserveResourceTemplate{
+		Spec: clusterclaimv1alpha1.ClusterClaimObserveResourceTemplateSpec{
+			APIVersion: "cluster.x-k8s.io/v1beta2",
+			Kind:       "Cluster",
+		},
+	}
+	rendered := map[string]interface{}{
+		"metadata": map[string]interface{}{
+			"labels":      map[string]interface{}{"app": "test", "clusterclaim.in-cloud.io/claim-name": "should-be-overridden"},
+			"annotations": map[string]interface{}{"note": "value"},
+		},
+		"spec": map[string]interface{}{
+			"paused":   false,
+			"replicas": int64(3),
+		},
+		"data": map[string]interface{}{"key": "val"},
 	}
 
-	makeObj := func(labels map[string]string, annotations map[string]string, ownerRefs []metav1.OwnerReference, spec map[string]interface{}) *unstructured.Unstructured {
-		obj := &unstructured.Unstructured{Object: make(map[string]interface{})}
-		obj.SetLabels(labels)
-		obj.SetAnnotations(annotations)
-		obj.SetOwnerReferences(ownerRefs)
-		if spec != nil {
-			_ = unstructured.SetNestedField(obj.Object, spec, "spec")
-		}
-		return obj
+	obj := buildDesiredResource(claim, tmpl, rendered, "claim1-infra", "ns1")
+
+	if got := obj.GetAPIVersion(); got != "cluster.x-k8s.io/v1beta2" {
+		t.Errorf("apiVersion = %q, want cluster.x-k8s.io/v1beta2", got)
+	}
+	if got := obj.GetKind(); got != "Cluster" {
+		t.Errorf("kind = %q, want Cluster", got)
+	}
+	if obj.GetName() != "claim1-infra" || obj.GetNamespace() != "ns1" {
+		t.Errorf("name/namespace = %q/%q, want claim1-infra/ns1", obj.GetName(), obj.GetNamespace())
 	}
 
-	tests := []struct {
-		name     string
-		existing *unstructured.Unstructured
-		desired  *unstructured.Unstructured
-		rendered map[string]interface{}
-		want     bool
-	}{
-		{
-			name:     "identical — no update needed",
-			existing: makeObj(baseLabels, baseAnnotations, baseOwnerRefs, baseSpec),
-			desired:  makeObj(baseLabels, baseAnnotations, baseOwnerRefs, baseSpec),
-			rendered: map[string]interface{}{"spec": baseSpec},
-			want:     false,
-		},
-		{
-			name:     "labels differ",
-			existing: makeObj(map[string]string{"app": "test"}, baseAnnotations, baseOwnerRefs, baseSpec),
-			desired:  makeObj(baseLabels, baseAnnotations, baseOwnerRefs, baseSpec),
-			rendered: map[string]interface{}{"spec": baseSpec},
-			want:     true,
-		},
-		{
-			name:     "annotations differ",
-			existing: makeObj(baseLabels, map[string]string{"note": "old"}, baseOwnerRefs, baseSpec),
-			desired:  makeObj(baseLabels, baseAnnotations, baseOwnerRefs, baseSpec),
-			rendered: map[string]interface{}{"spec": baseSpec},
-			want:     true,
-		},
-		{
-			name: "ownerReferences differ",
-			existing: makeObj(baseLabels, baseAnnotations, []metav1.OwnerReference{
-				{APIVersion: "v1", Kind: "ClusterClaim", Name: "other", UID: "uid2"},
-			}, baseSpec),
-			desired:  makeObj(baseLabels, baseAnnotations, baseOwnerRefs, baseSpec),
-			rendered: map[string]interface{}{"spec": baseSpec},
-			want:     true,
-		},
-		{
-			name:     "spec differs",
-			existing: makeObj(baseLabels, baseAnnotations, baseOwnerRefs, map[string]interface{}{"replicas": int64(1), "paused": false}),
-			desired:  makeObj(baseLabels, baseAnnotations, baseOwnerRefs, baseSpec),
-			rendered: map[string]interface{}{"spec": baseSpec},
-			want:     true,
-		},
-		{
-			name: "data differs",
-			existing: func() *unstructured.Unstructured {
-				obj := makeObj(baseLabels, baseAnnotations, baseOwnerRefs, nil)
-				_ = unstructured.SetNestedField(obj.Object, map[string]interface{}{"key": "old"}, "data")
-				return obj
-			}(),
-			desired:  makeObj(baseLabels, baseAnnotations, baseOwnerRefs, nil),
-			rendered: map[string]interface{}{"data": map[string]interface{}{"key": "new"}},
-			want:     true,
-		},
-		{
-			name: "data identical",
-			existing: func() *unstructured.Unstructured {
-				obj := makeObj(baseLabels, baseAnnotations, baseOwnerRefs, nil)
-				_ = unstructured.SetNestedField(obj.Object, map[string]interface{}{"key": "same"}, "data")
-				return obj
-			}(),
-			desired:  makeObj(baseLabels, baseAnnotations, baseOwnerRefs, nil),
-			rendered: map[string]interface{}{"data": map[string]interface{}{"key": "same"}},
-			want:     false,
-		},
-		{
-			name:     "no spec or data in rendered — no update",
-			existing: makeObj(baseLabels, baseAnnotations, baseOwnerRefs, baseSpec),
-			desired:  makeObj(baseLabels, baseAnnotations, baseOwnerRefs, baseSpec),
-			rendered: map[string]interface{}{},
-			want:     false,
-		},
-		{
-			name:     "nil annotations both — no update",
-			existing: makeObj(baseLabels, nil, baseOwnerRefs, baseSpec),
-			desired:  makeObj(baseLabels, nil, baseOwnerRefs, baseSpec),
-			rendered: map[string]interface{}{"spec": baseSpec},
-			want:     false,
-		},
-		{
-			name: "existing spec has extra keys from external controller — no update",
-			existing: makeObj(baseLabels, baseAnnotations, baseOwnerRefs,
-				map[string]interface{}{
-					"replicas":             int64(3),
-					"paused":               false,
-					"controlPlaneEndpoint": map[string]interface{}{"host": "10.0.0.1", "port": int64(6443)},
-				}),
-			desired:  makeObj(baseLabels, baseAnnotations, baseOwnerRefs, baseSpec),
-			rendered: map[string]interface{}{"spec": baseSpec},
-			want:     false,
-		},
-		{
-			name: "existing spec has extra keys but rendered key differs — update needed",
-			existing: makeObj(baseLabels, baseAnnotations, baseOwnerRefs,
-				map[string]interface{}{
-					"replicas":             int64(1),
-					"paused":               false,
-					"controlPlaneEndpoint": map[string]interface{}{"host": "10.0.0.1"},
-				}),
-			desired:  makeObj(baseLabels, baseAnnotations, baseOwnerRefs, baseSpec),
-			rendered: map[string]interface{}{"spec": baseSpec},
-			want:     true,
-		},
-		{
-			name:     "nil vs empty annotations — update needed",
-			existing: makeObj(baseLabels, nil, baseOwnerRefs, baseSpec),
-			desired:  makeObj(baseLabels, map[string]string{}, baseOwnerRefs, baseSpec),
-			rendered: map[string]interface{}{"spec": baseSpec},
-			want:     true,
+	owners := obj.GetOwnerReferences()
+	if len(owners) != 1 || owners[0].Name != "claim1" || owners[0].Kind != "ClusterClaim" {
+		t.Fatalf("ownerReferences = %+v, want single ClusterClaim owner claim1", owners)
+	}
+	if owners[0].Controller == nil || !*owners[0].Controller {
+		t.Errorf("ownerReference.Controller = %v, want true", owners[0].Controller)
+	}
+
+	// standard claim labels win over rendered labels of the same key
+	wantLabels := map[string]string{
+		"app":                                 "test",
+		"clusterclaim.in-cloud.io/claim-name": "claim1",
+		"clusterclaim.in-cloud.io/claim-namespace": "ns1",
+	}
+	if got := obj.GetLabels(); !reflect.DeepEqual(got, wantLabels) {
+		t.Errorf("labels = %v, want %v", got, wantLabels)
+	}
+
+	if got := obj.GetAnnotations(); !reflect.DeepEqual(got, map[string]string{"note": "value"}) {
+		t.Errorf("annotations = %v, want {note: value}", got)
+	}
+
+	wantSpec := map[string]interface{}{"paused": false, "replicas": int64(3)}
+	if got, _, _ := unstructured.NestedMap(obj.Object, "spec"); !reflect.DeepEqual(got, wantSpec) {
+		t.Errorf("spec = %v, want %v", got, wantSpec)
+	}
+	if got, _, _ := unstructured.NestedMap(obj.Object, "data"); !reflect.DeepEqual(got, map[string]interface{}{"key": "val"}) {
+		t.Errorf("data = %v, want {key: val}", got)
+	}
+}
+
+func TestBuildDesiredResourceNoOptionalFields(t *testing.T) {
+	claim := &clusterclaimv1alpha1.ClusterClaim{
+		ObjectMeta: metav1.ObjectMeta{Name: "c", Namespace: "n"},
+	}
+	tmpl := &clusterclaimv1alpha1.ClusterClaimObserveResourceTemplate{
+		Spec: clusterclaimv1alpha1.ClusterClaimObserveResourceTemplateSpec{
+			APIVersion: "in-cloud.io/v1alpha1",
+			Kind:       "CertificateSet",
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := resourceNeedsUpdate(tt.existing, tt.desired, tt.rendered)
-			if got != tt.want {
-				t.Errorf("resourceNeedsUpdate() = %v, want %v", got, tt.want)
-			}
-		})
+	obj := buildDesiredResource(claim, tmpl, map[string]interface{}{}, "c-infra", "n")
+
+	if _, found, _ := unstructured.NestedFieldNoCopy(obj.Object, "spec"); found {
+		t.Error("spec should be absent when not rendered")
+	}
+	if _, found, _ := unstructured.NestedFieldNoCopy(obj.Object, "data"); found {
+		t.Error("data should be absent when not rendered")
+	}
+	if obj.GetAnnotations() != nil {
+		t.Errorf("annotations should be nil when not rendered, got %v", obj.GetAnnotations())
 	}
 }

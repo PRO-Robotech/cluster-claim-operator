@@ -539,6 +539,20 @@ var _ = Describe("ClusterClaim Controller", func() {
 				g.Expect(k8sClient.Get(ctx, claimKey, &fetched)).To(Succeed())
 				g.Expect(fetched.Status.Phase).To(Equal(clusterclaimv1alpha1.PhaseWaitingDependency))
 			}).WithTimeout(timeout).WithPolling(polling).Should(Succeed())
+
+			// Verify ConditionPaused is reset (False) or removed once unpaused.
+			Eventually(func(g Gomega) {
+				var fetched clusterclaimv1alpha1.ClusterClaim
+				g.Expect(k8sClient.Get(ctx, claimKey, &fetched)).To(Succeed())
+				for _, c := range fetched.Status.Conditions {
+					if c.Type == clusterclaimv1alpha1.ConditionPaused {
+						g.Expect(c.Status).To(Equal(metav1.ConditionFalse),
+							"ConditionPaused should be False after unpause, got %s", c.Status)
+						return
+					}
+				}
+				// Acceptable alternative: condition is removed entirely.
+			}).WithTimeout(timeout).WithPolling(polling).Should(Succeed())
 		})
 	})
 

@@ -21,6 +21,9 @@ import (
 	"flag"
 	"os"
 
+	"github.com/KimMachineGun/automemlimit/memlimit"
+	_ "go.uber.org/automaxprocs" // sets GOMAXPROCS from the cgroup CPU quota
+
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -29,6 +32,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
@@ -64,6 +68,7 @@ func main() {
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
+	var pprofAddr string
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -86,6 +91,9 @@ func main() {
 	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	flag.StringVar(&pprofAddr, "pprof-bind-address", "127.0.0.1:8082",
+		"Address for the pprof/diagnostics endpoint. Bind to loopback so it is reachable only via "+
+			"`kubectl port-forward` (access gated by pods/portforward RBAC). Set \"\" or \"0\" to disable.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -93,6 +101,14 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	// GOMEMLIMIT from the cgroup memory limit (GOMAXPROCS comes from the automaxprocs import).
+	if _, err := memlimit.SetGoMemLimitWithOpts(
+		memlimit.WithRatio(0.9),
+		memlimit.WithProvider(memlimit.FromCgroup),
+	); err != nil {
+		setupLog.Info("could not set GOMEMLIMIT from cgroup (running outside a memory-limited cgroup?)", "error", err)
+	}
 
 	if remoteNamespace == "" {
 		setupLog.Error(nil, "--remote-namespace is required")
@@ -167,12 +183,17 @@ func main() {
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:                 scheme,
+		Scheme: scheme,
+		Client: client.Options{
+			// Serve unstructured reads from the informer cache (all such types are watched via Owns()).
+			Cache: &client.CacheOptions{Unstructured: true},
+		},
 		Metrics:                metricsServerOptions,
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "d2fbeca3.in-cloud.io",
+		PprofBindAddress:       pprofAddr,
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
 		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly

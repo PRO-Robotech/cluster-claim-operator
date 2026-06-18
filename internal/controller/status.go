@@ -66,6 +66,11 @@ func setWaiting(claim *clusterclaimv1alpha1.ClusterClaim, condType, message stri
 	setCondition(claim, condType, metav1.ConditionFalse, "WaitingDependency", message)
 }
 
+// clearPausedCondition drops the Paused condition once reconciliation resumes.
+func clearPausedCondition(claim *clusterclaimv1alpha1.ClusterClaim) {
+	apimeta.RemoveStatusCondition(&claim.Status.Conditions, clusterclaimv1alpha1.ConditionPaused)
+}
+
 // mirrorVaultStatus mirrors VaultClaim phase and conditions into ClusterClaim.Status.Vault.
 // Errors are logged but never stop the pipeline.
 func (r *ClusterClaimReconciler) mirrorVaultStatus(ctx context.Context, claim *clusterclaimv1alpha1.ClusterClaim) {
