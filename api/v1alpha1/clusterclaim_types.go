@@ -34,17 +34,19 @@ const (
 
 // Condition type constants for ClusterClaim.
 const (
-	ConditionReady                 = "Ready"
-	ConditionApplicationCreated    = "ApplicationCreated"
-	ConditionInfraCertificateReady = "InfraCertificateReady"
-	ConditionInfraProvisioned      = "InfraProvisioned"
-	ConditionInfraCPReady          = "InfraCPReady"
-	ConditionCcmCsrcCreated        = "CcmCsrcCreated"
-	ConditionRemoteConfigApplied   = "RemoteConfigApplied"
-	ConditionClientCPReady         = "ClientCPReady"
-	ConditionVaultClaimCreated     = "VaultClaimCreated"
-	ConditionVaultClaimReady       = "VaultClaimReady"
-	ConditionPaused                = "Paused"
+	ConditionReady                   = "Ready"
+	ConditionApplicationCreated      = "ApplicationCreated"
+	ConditionInfraCertificateReady   = "InfraCertificateReady"
+	ConditionInfraProvisioned        = "InfraProvisioned"
+	ConditionInfraCPReady            = "InfraCPReady"
+	ConditionCcmCsrcCreated          = "CcmCsrcCreated"
+	ConditionRemoteConfigApplied     = "RemoteConfigApplied"
+	ConditionClientCPReady           = "ClientCPReady"
+	ConditionVaultClaimCreated       = "VaultClaimCreated"
+	ConditionVaultClaimReady         = "VaultClaimReady"
+	ConditionVaultSecretClaimCreated = "VaultSecretClaimCreated"
+	ConditionVaultSecretClaimReady   = "VaultSecretClaimReady"
+	ConditionPaused                  = "Paused"
 )
 
 // Finalizer for cleanup on deletion.
@@ -138,6 +140,9 @@ type ClusterClaimSpec struct {
 
 	// +optional
 	VaultClaimTemplateRef *TemplateRef `json:"vaultClaimTemplateRef,omitempty"`
+
+	// +optional
+	VaultSecretClaimTemplateRef *TemplateRef `json:"vaultSecretClaimTemplateRef,omitempty"`
 
 	// Cluster parameters.
 
@@ -245,6 +250,9 @@ type ClusterClaimStatus struct {
 
 	// +optional
 	Vault *VaultStatusSummary `json:"vault,omitempty"`
+
+	// +optional
+	VaultSecret *VaultStatusSummary `json:"vaultSecret,omitempty"`
 }
 
 // +kubebuilder:object:root=true

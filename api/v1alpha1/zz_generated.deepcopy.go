@@ -207,6 +207,11 @@ func (in *ClusterClaimSpec) DeepCopyInto(out *ClusterClaimSpec) {
 		*out = new(TemplateRef)
 		**out = **in
 	}
+	if in.VaultSecretClaimTemplateRef != nil {
+		in, out := &in.VaultSecretClaimTemplateRef, &out.VaultSecretClaimTemplateRef
+		*out = new(TemplateRef)
+		**out = **in
+	}
 	out.Configuration = in.Configuration
 	if in.ExtraEnvs != nil {
 		in, out := &in.ExtraEnvs, &out.ExtraEnvs
@@ -246,6 +251,11 @@ func (in *ClusterClaimStatus) DeepCopyInto(out *ClusterClaimStatus) {
 	}
 	if in.Vault != nil {
 		in, out := &in.Vault, &out.Vault
+		*out = new(VaultStatusSummary)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.VaultSecret != nil {
+		in, out := &in.VaultSecret, &out.VaultSecret
 		*out = new(VaultStatusSummary)
 		(*in).DeepCopyInto(*out)
 	}

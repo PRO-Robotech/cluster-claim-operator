@@ -54,3 +54,8 @@ func KubeconfigSecretName(claimName string) string {
 func VaultClaimName(claimName string) string {
 	return claimName
 }
+
+// VaultSecretClaimName returns the name for the VaultSecretClaim resource (1:1 with ClusterClaim).
+func VaultSecretClaimName(claimName string) string {
+	return claimName
+}
