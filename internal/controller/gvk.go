@@ -25,4 +25,5 @@ var (
 	CcmCsrcGVK             = schema.GroupVersionKind{Group: "controller.in-cloud.io", Version: "v1alpha1", Kind: "CcmCsrc"}
 	KubeadmControlPlaneGVK = schema.GroupVersionKind{Group: "controlplane.cluster.x-k8s.io", Version: "v1beta2", Kind: "KubeadmControlPlane"}
 	VaultClaimGVK          = schema.GroupVersionKind{Group: "vault.in-cloud.io", Version: "v1alpha1", Kind: "VaultClaim"}
+	VaultSecretClaimGVK    = schema.GroupVersionKind{Group: "vault.in-cloud.io", Version: "v1alpha1", Kind: "VaultSecretClaim"}
 )

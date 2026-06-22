@@ -26,15 +26,16 @@ import (
 )
 
 const (
-	indexObserveTemplateRef         = "spec.observeTemplateRef.name"
-	indexCertSetInfraTemplateRef    = "spec.certificateSetTemplateRef.infra.name"
-	indexCertSetClientTemplateRef   = "spec.certificateSetTemplateRef.client.name"
-	indexClusterInfraTemplateRef    = "spec.clusterTemplateRef.infra.name"
-	indexClusterClientTemplateRef   = "spec.clusterTemplateRef.client.name"
-	indexCcmCsrTemplateRef          = "spec.ccmCsrTemplateRef.name"
-	indexConfigMapInfraTemplateRef  = "spec.configMapTemplateRef.infra.name"
-	indexConfigMapClientTemplateRef = "spec.configMapTemplateRef.client.name"
-	indexVaultClaimTemplateRef      = "spec.vaultClaimTemplateRef.name"
+	indexObserveTemplateRef          = "spec.observeTemplateRef.name"
+	indexCertSetInfraTemplateRef     = "spec.certificateSetTemplateRef.infra.name"
+	indexCertSetClientTemplateRef    = "spec.certificateSetTemplateRef.client.name"
+	indexClusterInfraTemplateRef     = "spec.clusterTemplateRef.infra.name"
+	indexClusterClientTemplateRef    = "spec.clusterTemplateRef.client.name"
+	indexCcmCsrTemplateRef           = "spec.ccmCsrTemplateRef.name"
+	indexConfigMapInfraTemplateRef   = "spec.configMapTemplateRef.infra.name"
+	indexConfigMapClientTemplateRef  = "spec.configMapTemplateRef.client.name"
+	indexVaultClaimTemplateRef       = "spec.vaultClaimTemplateRef.name"
+	indexVaultSecretClaimTemplateRef = "spec.vaultSecretClaimTemplateRef.name"
 )
 
 // allIndexFields returns the list of all templateRef index field names.
@@ -49,6 +50,7 @@ func allIndexFields() []string {
 		indexConfigMapInfraTemplateRef,
 		indexConfigMapClientTemplateRef,
 		indexVaultClaimTemplateRef,
+		indexVaultSecretClaimTemplateRef,
 	}
 }
 
@@ -138,6 +140,16 @@ func SetupIndexers(mgr ctrl.Manager) error {
 					return nil
 				}
 				return []string{claim.Spec.VaultClaimTemplateRef.Name}
+			},
+		},
+		{
+			field: indexVaultSecretClaimTemplateRef,
+			fn: func(obj client.Object) []string {
+				claim := obj.(*clusterclaimv1alpha1.ClusterClaim)
+				if claim.Spec.VaultSecretClaimTemplateRef == nil {
+					return nil
+				}
+				return []string{claim.Spec.VaultSecretClaimTemplateRef.Name}
 			},
 		},
 	}

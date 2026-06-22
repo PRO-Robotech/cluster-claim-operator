@@ -1,5 +1,11 @@
 # ClusterClaim Operator — Техническое задание
 
+> `spec.vaultClaimTemplateRef`, два новых шага в pipeline (Step 8
+> `EnsureVaultClaim`, Step 14 `WaitVaultClaim`), reverse-step 0 в deletion,
+> mirror VaultClaim status в `status.vault`. Детали — `docs/VAULT-INTEGRATION.md`.
+> Этот документ сохраняет описание базового 13-шагового pipeline; полное
+> переписывание §1–§7 под 15-шаговый pipeline вынесено в отдельную задачу.
+
 ## 1. Ресурсы, которыми оперирует оператор
 
 ### 1.1. CRD оператора (2 штуки)

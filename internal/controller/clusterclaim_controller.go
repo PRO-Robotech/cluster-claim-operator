@@ -73,6 +73,7 @@ func (r *ClusterClaimReconciler) remoteNamespaceForClaim(claim *clusterclaimv1al
 // +kubebuilder:rbac:groups=controlplane.cluster.x-k8s.io,resources=kubeadmcontrolplanes,verbs=get;list;watch
 // +kubebuilder:rbac:groups=controller.in-cloud.io,resources=ccmcsrcs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vault.in-cloud.io,resources=vaultclaims,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=vault.in-cloud.io,resources=vaultsecretclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=clusterclaim.in-cloud.io,resources=clusterclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=clusterclaim.in-cloud.io,resources=clusterclaims/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=clusterclaim.in-cloud.io,resources=clusterclaims/finalizers,verbs=update
@@ -141,6 +142,20 @@ func (r *ClusterClaimReconciler) reconcileDelete(ctx context.Context, claim *clu
 			return ctrl.Result{}, err
 		}
 		deleted, err := r.deleteAndWait(ctx, VaultClaimGVK, vcName, claim.Namespace)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if !deleted {
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
+	}
+
+	if claim.Spec.VaultSecretClaimTemplateRef != nil {
+		vscName := naming.VaultSecretClaimName(claim.Name)
+		if err := r.removeResourceFinalizer(ctx, VaultSecretClaimGVK, vscName, claim.Namespace); err != nil {
+			return ctrl.Result{}, err
+		}
+		deleted, err := r.deleteAndWait(ctx, VaultSecretClaimGVK, vscName, claim.Namespace)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -308,6 +323,9 @@ func (r *ClusterClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	vaultClaimObj := &unstructured.Unstructured{}
 	vaultClaimObj.SetGroupVersionKind(VaultClaimGVK)
 
+	vaultSecretClaimObj := &unstructured.Unstructured{}
+	vaultSecretClaimObj.SetGroupVersionKind(VaultSecretClaimGVK)
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&clusterclaimv1alpha1.ClusterClaim{},
 			builder.WithPredicates(predicate.Or(
@@ -319,6 +337,7 @@ func (r *ClusterClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(clusterObj).
 		Owns(ccmObj).
 		Owns(vaultClaimObj).
+		Owns(vaultSecretClaimObj).
 		Watches(&clusterclaimv1alpha1.ClusterClaimObserveResourceTemplate{},
 			handler.EnqueueRequestsFromMapFunc(r.findClaimsForTemplate)).
 		Watches(&corev1.Secret{},
