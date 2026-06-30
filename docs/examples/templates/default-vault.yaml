@@ -1,0 +1,41 @@
+apiVersion: clusterclaim.in-cloud.io/v1alpha1
+kind: ClusterClaimObserveResourceTemplate
+metadata:
+  name: default-vault
+spec:
+  apiVersion: vault.in-cloud.io/v1alpha1
+  kind: VaultClaim
+  value: |
+    metadata:
+      labels:
+        xcluster.in-cloud.io/name: {{ .ClusterClaim.metadata.name }}
+    spec:
+      vaultConfigRef:
+        name: default
+      clusterRef:
+        name: {{ .ClusterClaim.metadata.name }}
+        kubeconfigSecret: {{ .ClusterClaim.metadata.name }}-infra-kubeconfig
+      secretsPrefix: clusters/{{ .ClusterClaim.metadata.name }}
+      auth:
+        mountPath: kubernetes-{{ .ClusterClaim.metadata.name }}
+        autoCreate: true
+        tokenReviewer:
+          serviceAccount:
+            namespace: beget-vault-system
+            name: vault-token-reviewer
+            autoCreate: true
+          ttl: 24h
+      roles:
+        - name: vmauth-reader
+          boundServiceAccounts:
+            name: vmauth
+            namespace: monitoring
+          policies:
+            - {{ .ClusterClaim.metadata.name }}-vmauth-reader
+          tokenTTL: 1h
+      policies:
+        - name: {{ .ClusterClaim.metadata.name }}-vmauth-reader
+          rules: |
+            path "secret/data/clusters/{{ .ClusterClaim.metadata.name }}/monitoring/vmauth/*" {
+              capabilities = ["read", "list"]
+            }

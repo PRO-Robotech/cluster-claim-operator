@@ -25,6 +25,7 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -72,34 +73,46 @@ func clearPausedCondition(claim *clusterclaimv1alpha1.ClusterClaim) {
 }
 
 // mirrorVaultStatus mirrors VaultClaim phase and conditions into ClusterClaim.Status.Vault.
-// Errors are logged but never stop the pipeline.
 func (r *ClusterClaimReconciler) mirrorVaultStatus(ctx context.Context, claim *clusterclaimv1alpha1.ClusterClaim) {
 	if claim.Spec.VaultClaimTemplateRef == nil {
 		claim.Status.Vault = nil
 		return
 	}
+	claim.Status.Vault = r.mirrorResourceStatus(ctx, VaultClaimGVK, "VaultClaim", claim.Name, claim.Namespace)
+}
 
-	logger := log.FromContext(ctx)
-	name := claim.Name
-	vc := &unstructured.Unstructured{}
-	vc.SetGroupVersionKind(VaultClaimGVK)
-	if err := r.Get(ctx, client.ObjectKey{Name: name, Namespace: claim.Namespace}, vc); err != nil {
-		if apierrors.IsNotFound(err) {
-			claim.Status.Vault = &clusterclaimv1alpha1.VaultStatusSummary{Name: name}
-			return
-		}
-		logger.Error(err, "failed to fetch VaultClaim for status mirror", "name", name)
+// mirrorVaultSecretStatus mirrors VaultSecretClaim phase and conditions into ClusterClaim.Status.VaultSecret.
+func (r *ClusterClaimReconciler) mirrorVaultSecretStatus(ctx context.Context, claim *clusterclaimv1alpha1.ClusterClaim) {
+	if claim.Spec.VaultSecretClaimTemplateRef == nil {
+		claim.Status.VaultSecret = nil
 		return
 	}
+	claim.Status.VaultSecret = r.mirrorResourceStatus(ctx, VaultSecretClaimGVK, "VaultSecretClaim", claim.Name, claim.Namespace)
+}
 
-	phase, _, _ := unstructured.NestedString(vc.Object, "status", "phase")
+// mirrorResourceStatus projects a resource's status.phase + status.conditions
+// into a VaultStatusSummary. Errors are logged but never stop the pipeline; a
+// missing resource yields a name-only summary.
+func (r *ClusterClaimReconciler) mirrorResourceStatus(ctx context.Context, gvk schema.GroupVersionKind, kind, name, namespace string) *clusterclaimv1alpha1.VaultStatusSummary {
+	logger := log.FromContext(ctx)
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(gvk)
+	if err := r.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, obj); err != nil {
+		if apierrors.IsNotFound(err) {
+			return &clusterclaimv1alpha1.VaultStatusSummary{Name: name}
+		}
+		logger.Error(err, "failed to fetch resource for status mirror", "kind", kind, "name", name)
+		return nil
+	}
+
+	phase, _, _ := unstructured.NestedString(obj.Object, "status", "phase")
 	summary := &clusterclaimv1alpha1.VaultStatusSummary{
 		Name:  name,
 		Phase: phase,
 		Ready: phase == clusterclaimv1alpha1.PhaseReady,
 	}
 
-	if conds, found, _ := unstructured.NestedSlice(vc.Object, "status", "conditions"); found {
+	if conds, found, _ := unstructured.NestedSlice(obj.Object, "status", "conditions"); found {
 		for _, c := range conds {
 			cond, ok := c.(map[string]interface{})
 			if !ok {
@@ -126,7 +139,7 @@ func (r *ClusterClaimReconciler) mirrorVaultStatus(ctx context.Context, claim *c
 		}
 	}
 
-	claim.Status.Vault = summary
+	return summary
 }
 
 // syncClusterStatuses mirrors Cluster[infra] and Cluster[client] status fields

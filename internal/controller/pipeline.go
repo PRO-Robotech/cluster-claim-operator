@@ -103,6 +103,7 @@ func (r *ClusterClaimReconciler) executePipeline(ctx context.Context, claim *clu
 	// Mirror Cluster statuses into ClusterClaim on every reconcile.
 	r.syncClusterStatuses(ctx, claim, infraCluster, clientCluster)
 	r.mirrorVaultStatus(ctx, claim)
+	r.mirrorVaultSecretStatus(ctx, claim)
 
 	steps := []pipelineStep{
 		{"Application", r.stepApplication},
@@ -113,12 +114,14 @@ func (r *ClusterClaimReconciler) executePipeline(ctx context.Context, claim *clu
 		{"CertificateSetClient", r.stepCertificateSetClient},
 		{"WaitInfraCPReady", r.stepWaitInfraCPReady},
 		{"EnsureVaultClaim", r.stepEnsureVaultClaim},
+		{"EnsureVaultSecretClaim", r.stepEnsureVaultSecretClaim},
 		{"CcmCsrc", r.stepCcmCsrc},
 		{"RemoteConfigMaps", r.stepRemoteConfigMaps},
 		{"ClusterClient", r.stepClusterClient},
 		{"WaitClientCPReady", r.stepWaitClientCPReady},
 		{"CcmCsrcUpdate", r.stepCcmCsrcUpdate},
 		{"WaitVaultClaim", r.stepWaitVaultClaim},
+		{"WaitVaultSecretClaim", r.stepWaitVaultSecretClaim},
 	}
 
 	for _, s := range steps {
@@ -415,6 +418,60 @@ func (r *ClusterClaimReconciler) stepWaitVaultClaim(ctx context.Context, claim *
 	}
 	r.event(claim, corev1.EventTypeNormal, "VaultClaimReady", "VaultClaim %s is Ready", name)
 	setCondition(claim, clusterclaimv1alpha1.ConditionVaultClaimReady, metav1.ConditionTrue, "Ready", "VaultClaim phase=Ready")
+	return Proceed, nil
+}
+
+// stepEnsureVaultSecretClaim creates or updates the VaultSecretClaim (alongside
+// EnsureVaultClaim). Skipped when vaultSecretClaimTemplateRef is nil.
+func (r *ClusterClaimReconciler) stepEnsureVaultSecretClaim(ctx context.Context, claim *clusterclaimv1alpha1.ClusterClaim, tmplCtx *renderer.TemplateContext) (StepResult, error) {
+	if claim.Spec.VaultSecretClaimTemplateRef == nil {
+		return Proceed, nil
+	}
+	tmplName := claim.Spec.VaultSecretClaimTemplateRef.Name
+	var tmpl clusterclaimv1alpha1.ClusterClaimObserveResourceTemplate
+	if err := r.Get(ctx, client.ObjectKey{Name: tmplName}, &tmpl); err != nil {
+		if apierrors.IsNotFound(err) {
+			return Proceed, NewTerminalErrorf("VaultSecretClaim template %q not found", tmplName)
+		}
+		return Proceed, fmt.Errorf("get VaultSecretClaim template %q: %w", tmplName, err)
+	}
+	wantAPI := VaultSecretClaimGVK.GroupVersion().String()
+	if tmpl.Spec.APIVersion != wantAPI || tmpl.Spec.Kind != VaultSecretClaimGVK.Kind {
+		return Proceed, NewTerminalErrorf(
+			"VaultSecretClaim template %q renders %s/%s but expected %s/%s",
+			tmplName, tmpl.Spec.APIVersion, tmpl.Spec.Kind, wantAPI, VaultSecretClaimGVK.Kind)
+	}
+	name := naming.VaultSecretClaimName(claim.Name)
+	if err := r.ensureResource(ctx, claim, tmplName, name, claim.Namespace, *tmplCtx); err != nil {
+		return Proceed, err
+	}
+	if err := r.ensureResourceFinalizer(ctx, VaultSecretClaimGVK, name, claim.Namespace); err != nil {
+		return Proceed, err
+	}
+	r.event(claim, corev1.EventTypeNormal, "CreatedVaultSecretClaim", "VaultSecretClaim %s created", name)
+	setCondition(claim, clusterclaimv1alpha1.ConditionVaultSecretClaimCreated, metav1.ConditionTrue, "Created", "VaultSecretClaim created/updated")
+	return Proceed, nil
+}
+
+// stepWaitVaultSecretClaim waits for VaultSecretClaim.status.phase == "Ready"
+// (before READY). Skipped when vaultSecretClaimTemplateRef is nil.
+func (r *ClusterClaimReconciler) stepWaitVaultSecretClaim(ctx context.Context, claim *clusterclaimv1alpha1.ClusterClaim, _ *renderer.TemplateContext) (StepResult, error) {
+	if claim.Spec.VaultSecretClaimTemplateRef == nil {
+		return Proceed, nil
+	}
+	name := naming.VaultSecretClaimName(claim.Name)
+	vsc, err := r.getResource(ctx, VaultSecretClaimGVK, name, claim.Namespace)
+	if err != nil {
+		return Proceed, fmt.Errorf("get VaultSecretClaim: %w", err)
+	}
+	phase, _, _ := unstructured.NestedString(vsc.Object, "status", "phase")
+	if phase != clusterclaimv1alpha1.PhaseReady {
+		setWaiting(claim, clusterclaimv1alpha1.ConditionVaultSecretClaimReady,
+			fmt.Sprintf("Waiting for VaultSecretClaim to reach Ready (current phase: %q)", phase))
+		return Wait, nil
+	}
+	r.event(claim, corev1.EventTypeNormal, "VaultSecretClaimReady", "VaultSecretClaim %s is Ready", name)
+	setCondition(claim, clusterclaimv1alpha1.ConditionVaultSecretClaimReady, metav1.ConditionTrue, "Ready", "VaultSecretClaim phase=Ready")
 	return Proceed, nil
 }
 

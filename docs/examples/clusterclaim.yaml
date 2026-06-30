@@ -42,6 +42,18 @@ spec:
     client:
       name: "default-cm-client"
 
+  # Optional — when set, the operator creates a VaultClaim after the infra
+  # control plane is initialized and waits for its phase to reach Ready before
+  # marking the ClusterClaim as Ready. Omit to skip vault integration.
+  vaultClaimTemplateRef:
+    name: "default-vault"
+
+  # Optional — when set, the operator creates a VaultSecretClaim (fills Vault with
+  # secret values) and waits for its phase to reach Ready before marking the
+  # ClusterClaim as Ready. Independent of vaultClaimTemplateRef; omit to skip.
+  vaultSecretClaimTemplateRef:
+    name: "default-vault-secret"
+
   # ──────────────────────────────────────────────
   # Общие переменные
   # ──────────────────────────────────────────────
