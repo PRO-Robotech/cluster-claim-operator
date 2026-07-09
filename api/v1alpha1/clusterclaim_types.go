@@ -97,6 +97,10 @@ type NetworkConfig struct {
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=65535
 	KubeApiserverPort int32 `json:"kubeApiserverPort"`
+	// +kubebuilder:validation:Enum=cluster-pool;multi-pool
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="ipamMode is immutable"
+	// +optional
+	IpamMode string `json:"ipamMode,omitempty"`
 }
 
 // ComponentVersion defines a version for a cluster component.

@@ -41,6 +41,59 @@ func TestValidateUpdate_NoChange(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func infraClaim(ipam string) *ClusterClaim {
+	return &ClusterClaim{Spec: ClusterClaimSpec{
+		Infra: InfraSpec{Network: NetworkConfig{IpamMode: ipam}},
+	}}
+}
+
+func clientClaim(network *NetworkConfig) *ClusterClaim {
+	return &ClusterClaim{Spec: ClusterClaimSpec{
+		Client: ClientSpec{Enabled: true, Network: network},
+	}}
+}
+
+func TestValidateUpdate_InfraIpamModeImmutable(t *testing.T) {
+	v := &clusterClaimValidator{}
+	_, err := v.ValidateUpdate(context.Background(), infraClaim("cluster-pool"), infraClaim("multi-pool"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "spec.infra.network.ipamMode is immutable")
+}
+
+func TestValidateUpdate_InfraIpamModeSetToUnsetRejected(t *testing.T) {
+	v := &clusterClaimValidator{}
+	_, err := v.ValidateUpdate(context.Background(), infraClaim("multi-pool"), infraClaim(""))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "spec.infra.network.ipamMode is immutable")
+}
+
+func TestValidateUpdate_IpamModeUnsetToSetAllowed(t *testing.T) {
+	v := &clusterClaimValidator{}
+	_, err := v.ValidateUpdate(context.Background(), infraClaim(""), infraClaim("cluster-pool"))
+	require.NoError(t, err)
+}
+
+func TestValidateUpdate_IpamModeSameValueAllowed(t *testing.T) {
+	v := &clusterClaimValidator{}
+	_, err := v.ValidateUpdate(context.Background(), infraClaim("multi-pool"), infraClaim("multi-pool"))
+	require.NoError(t, err)
+}
+
+func TestValidateUpdate_ClientIpamModeImmutable(t *testing.T) {
+	v := &clusterClaimValidator{}
+	old := clientClaim(&NetworkConfig{IpamMode: "cluster-pool"})
+	newClaim := clientClaim(&NetworkConfig{IpamMode: "multi-pool"})
+	_, err := v.ValidateUpdate(context.Background(), old, newClaim)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "spec.client.network.ipamMode is immutable")
+}
+
+func TestValidateUpdate_ClientNilNetworkSafe(t *testing.T) {
+	v := &clusterClaimValidator{}
+	_, err := v.ValidateUpdate(context.Background(), clientClaim(nil), clientClaim(&NetworkConfig{IpamMode: "multi-pool"}))
+	require.NoError(t, err)
+}
+
 func TestValidateCreate_AlwaysAccepts(t *testing.T) {
 	v := &clusterClaimValidator{}
 	_, err := v.ValidateCreate(context.Background(), &ClusterClaim{})

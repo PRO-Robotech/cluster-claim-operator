@@ -51,7 +51,33 @@ func (v *clusterClaimValidator) ValidateUpdate(_ context.Context, oldObj, newObj
 	if oldClaim.Spec.Client.Enabled != newClaim.Spec.Client.Enabled {
 		return nil, fmt.Errorf("field spec.client.enabled is immutable")
 	}
+
+	if err := validateIpamModeImmutable("spec.infra.network.ipamMode",
+		oldClaim.Spec.Infra.Network.IpamMode, newClaim.Spec.Infra.Network.IpamMode); err != nil {
+		return nil, err
+	}
+	if err := validateIpamModeImmutable("spec.client.network.ipamMode",
+		clientIpamMode(oldClaim), clientIpamMode(newClaim)); err != nil {
+		return nil, err
+	}
 	return nil, nil
+}
+
+// validateIpamModeImmutable rejects any change to an already-set ipamMode.
+// An unset (empty) previous value allows a one-time transition, so existing
+// ClusterClaims created before the field existed can be backfilled once.
+func validateIpamModeImmutable(field, oldVal, newVal string) error {
+	if oldVal != "" && oldVal != newVal {
+		return fmt.Errorf("field %s is immutable", field)
+	}
+	return nil
+}
+
+func clientIpamMode(claim *ClusterClaim) string {
+	if claim.Spec.Client.Network == nil {
+		return ""
+	}
+	return claim.Spec.Client.Network.IpamMode
 }
 
 func (v *clusterClaimValidator) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {

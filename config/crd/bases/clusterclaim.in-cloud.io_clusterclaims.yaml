@@ -106,6 +106,14 @@ spec:
                       clusterDNS:
                         minLength: 1
                         type: string
+                      ipamMode:
+                        enum:
+                        - cluster-pool
+                        - multi-pool
+                        type: string
+                        x-kubernetes-validations:
+                        - message: ipamMode is immutable
+                          rule: self == oldSelf
                       kubeApiserverPort:
                         format: int32
                         maximum: 65535
@@ -227,6 +235,14 @@ spec:
                       clusterDNS:
                         minLength: 1
                         type: string
+                      ipamMode:
+                        enum:
+                        - cluster-pool
+                        - multi-pool
+                        type: string
+                        x-kubernetes-validations:
+                        - message: ipamMode is immutable
+                          rule: self == oldSelf
                       kubeApiserverPort:
                         format: int32
                         maximum: 65535
