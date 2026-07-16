@@ -38,6 +38,7 @@ spec:
       podCidr: "10.244.0.0/16"
       clusterDNS: "10.96.0.10"
       kubeApiserverPort: 6443
+      ipamMode: multi-pool
     componentVersions:
       kubernetes:
         version: v1.34.4
@@ -48,6 +49,7 @@ spec:
       podCidr: "10.244.0.0/16"
       clusterDNS: "10.96.0.10"
       kubeApiserverPort: 26443
+      ipamMode: multi-pool
     componentVersions:
       kubernetes:
         version: v1.35.2
