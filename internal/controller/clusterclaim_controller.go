@@ -136,41 +136,25 @@ func (r *ClusterClaimReconciler) reconcileDelete(ctx context.Context, claim *clu
 
 	r.event(claim, corev1.EventTypeNormal, "DeletingResources", "Starting deletion of managed resources")
 
-	// 0. VaultClaim — must go before Cluster[infra]; vault-operator needs the kubeconfig for cleanup.
-	if claim.Spec.VaultClaimTemplateRef != nil {
-		vcName := naming.VaultClaimName(claim.Name)
-		if err := r.removeResourceFinalizer(ctx, VaultClaimGVK, vcName, claim.Namespace); err != nil {
-			return ctrl.Result{}, err
-		}
-		deleted, err := r.deleteAndWait(ctx, VaultClaimGVK, vcName, claim.Namespace)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		if !deleted {
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
-		}
+	// 0. Vault-family claims — must go before Cluster[infra]; vault-operator
+	// needs the kubeconfig for cleanup.
+	type dependentClaim struct {
+		enabled bool
+		gvk     schema.GroupVersionKind
+		name    string
 	}
-
-	if claim.Spec.VaultSecretClaimTemplateRef != nil {
-		vscName := naming.VaultSecretClaimName(claim.Name)
-		if err := r.removeResourceFinalizer(ctx, VaultSecretClaimGVK, vscName, claim.Namespace); err != nil {
+	for _, dep := range []dependentClaim{
+		{claim.Spec.VaultClaimTemplateRef != nil, VaultClaimGVK, naming.VaultClaimName(claim.Name)},
+		{claim.Spec.VaultSecretClaimTemplateRef != nil, VaultSecretClaimGVK, naming.VaultSecretClaimName(claim.Name)},
+		{claim.Spec.S3BucketClaimTemplateRef != nil, S3BucketClaimGVK, naming.S3BucketClaimName(claim.Name)},
+	} {
+		if !dep.enabled {
+			continue
+		}
+		if err := r.removeResourceFinalizer(ctx, dep.gvk, dep.name, claim.Namespace); err != nil {
 			return ctrl.Result{}, err
 		}
-		deleted, err := r.deleteAndWait(ctx, VaultSecretClaimGVK, vscName, claim.Namespace)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		if !deleted {
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
-		}
-	}
-
-	if claim.Spec.S3BucketClaimTemplateRef != nil {
-		sbcName := naming.S3BucketClaimName(claim.Name)
-		if err := r.removeResourceFinalizer(ctx, S3BucketClaimGVK, sbcName, claim.Namespace); err != nil {
-			return ctrl.Result{}, err
-		}
-		deleted, err := r.deleteAndWait(ctx, S3BucketClaimGVK, sbcName, claim.Namespace)
+		deleted, err := r.deleteAndWait(ctx, dep.gvk, dep.name, claim.Namespace)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
