@@ -46,6 +46,8 @@ const (
 	ConditionVaultClaimReady         = "VaultClaimReady"
 	ConditionVaultSecretClaimCreated = "VaultSecretClaimCreated"
 	ConditionVaultSecretClaimReady   = "VaultSecretClaimReady"
+	ConditionS3BucketClaimCreated    = "S3BucketClaimCreated"
+	ConditionS3BucketClaimReady      = "S3BucketClaimReady"
 	ConditionPaused                  = "Paused"
 )
 
@@ -147,6 +149,9 @@ type ClusterClaimSpec struct {
 
 	// +optional
 	VaultSecretClaimTemplateRef *TemplateRef `json:"vaultSecretClaimTemplateRef,omitempty"`
+
+	// +optional
+	S3BucketClaimTemplateRef *TemplateRef `json:"s3BucketClaimTemplateRef,omitempty"`
 
 	// Cluster parameters.
 
@@ -257,6 +262,9 @@ type ClusterClaimStatus struct {
 
 	// +optional
 	VaultSecret *VaultStatusSummary `json:"vaultSecret,omitempty"`
+
+	// +optional
+	S3Bucket *VaultStatusSummary `json:"s3Bucket,omitempty"`
 }
 
 // +kubebuilder:object:root=true
