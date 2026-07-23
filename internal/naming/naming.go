@@ -59,8 +59,3 @@ func VaultClaimName(claimName string) string {
 func VaultSecretClaimName(claimName string) string {
 	return claimName
 }
-
-// S3BucketClaimName returns the name for the S3BucketClaim resource (1:1 with ClusterClaim).
-func S3BucketClaimName(claimName string) string {
-	return claimName
-}

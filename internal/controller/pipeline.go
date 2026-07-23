@@ -104,11 +104,9 @@ func (r *ClusterClaimReconciler) executePipeline(ctx context.Context, claim *clu
 	r.syncClusterStatuses(ctx, claim, infraCluster, clientCluster)
 	r.mirrorVaultStatus(ctx, claim)
 	r.mirrorVaultSecretStatus(ctx, claim)
-	r.mirrorS3BucketStatus(ctx, claim)
 
 	steps := []pipelineStep{
 		{"Application", r.stepApplication},
-		{"EnsureS3BucketClaim", r.stepEnsureS3BucketClaim},
 		{"CertificateSetInfra", r.stepCertificateSetInfra},
 		{"WaitCertSetReady", r.stepWaitCertSetReady},
 		{"ClusterInfra", r.stepClusterInfra},
@@ -124,7 +122,6 @@ func (r *ClusterClaimReconciler) executePipeline(ctx context.Context, claim *clu
 		{"CcmCsrcUpdate", r.stepCcmCsrcUpdate},
 		{"WaitVaultClaim", r.stepWaitVaultClaim},
 		{"WaitVaultSecretClaim", r.stepWaitVaultSecretClaim},
-		{"WaitS3BucketClaim", r.stepWaitS3BucketClaim},
 	}
 
 	for _, s := range steps {
@@ -475,61 +472,6 @@ func (r *ClusterClaimReconciler) stepWaitVaultSecretClaim(ctx context.Context, c
 	}
 	r.event(claim, corev1.EventTypeNormal, "VaultSecretClaimReady", "VaultSecretClaim %s is Ready", name)
 	setCondition(claim, clusterclaimv1alpha1.ConditionVaultSecretClaimReady, metav1.ConditionTrue, "Ready", "VaultSecretClaim phase=Ready")
-	return Proceed, nil
-}
-
-// stepEnsureS3BucketClaim creates or updates the S3BucketClaim right after
-// Application — the bucket needs nothing from the cluster, so it provisions in
-// parallel with the VPS pipeline. Skipped when s3BucketClaimTemplateRef is nil.
-func (r *ClusterClaimReconciler) stepEnsureS3BucketClaim(ctx context.Context, claim *clusterclaimv1alpha1.ClusterClaim, tmplCtx *renderer.TemplateContext) (StepResult, error) {
-	if claim.Spec.S3BucketClaimTemplateRef == nil {
-		return Proceed, nil
-	}
-	tmplName := claim.Spec.S3BucketClaimTemplateRef.Name
-	var tmpl clusterclaimv1alpha1.ClusterClaimObserveResourceTemplate
-	if err := r.Get(ctx, client.ObjectKey{Name: tmplName}, &tmpl); err != nil {
-		if apierrors.IsNotFound(err) {
-			return Proceed, NewTerminalErrorf("S3BucketClaim template %q not found", tmplName)
-		}
-		return Proceed, fmt.Errorf("get S3BucketClaim template %q: %w", tmplName, err)
-	}
-	wantAPI := S3BucketClaimGVK.GroupVersion().String()
-	if tmpl.Spec.APIVersion != wantAPI || tmpl.Spec.Kind != S3BucketClaimGVK.Kind {
-		return Proceed, NewTerminalErrorf(
-			"S3BucketClaim template %q renders %s/%s but expected %s/%s",
-			tmplName, tmpl.Spec.APIVersion, tmpl.Spec.Kind, wantAPI, S3BucketClaimGVK.Kind)
-	}
-	name := naming.S3BucketClaimName(claim.Name)
-	if err := r.ensureResource(ctx, claim, tmplName, name, claim.Namespace, *tmplCtx); err != nil {
-		return Proceed, err
-	}
-	if err := r.ensureResourceFinalizer(ctx, S3BucketClaimGVK, name, claim.Namespace); err != nil {
-		return Proceed, err
-	}
-	r.event(claim, corev1.EventTypeNormal, "CreatedS3BucketClaim", "S3BucketClaim %s created", name)
-	setCondition(claim, clusterclaimv1alpha1.ConditionS3BucketClaimCreated, metav1.ConditionTrue, "Created", "S3BucketClaim created/updated")
-	return Proceed, nil
-}
-
-// stepWaitS3BucketClaim waits for S3BucketClaim.status.phase == "Ready" (before
-// READY). Skipped when s3BucketClaimTemplateRef is nil.
-func (r *ClusterClaimReconciler) stepWaitS3BucketClaim(ctx context.Context, claim *clusterclaimv1alpha1.ClusterClaim, _ *renderer.TemplateContext) (StepResult, error) {
-	if claim.Spec.S3BucketClaimTemplateRef == nil {
-		return Proceed, nil
-	}
-	name := naming.S3BucketClaimName(claim.Name)
-	sbc, err := r.getResource(ctx, S3BucketClaimGVK, name, claim.Namespace)
-	if err != nil {
-		return Proceed, fmt.Errorf("get S3BucketClaim: %w", err)
-	}
-	phase, _, _ := unstructured.NestedString(sbc.Object, "status", "phase")
-	if phase != clusterclaimv1alpha1.PhaseReady {
-		setWaiting(claim, clusterclaimv1alpha1.ConditionS3BucketClaimReady,
-			fmt.Sprintf("Waiting for S3BucketClaim to reach Ready (current phase: %q)", phase))
-		return Wait, nil
-	}
-	r.event(claim, corev1.EventTypeNormal, "S3BucketClaimReady", "S3BucketClaim %s is Ready", name)
-	setCondition(claim, clusterclaimv1alpha1.ConditionS3BucketClaimReady, metav1.ConditionTrue, "Ready", "S3BucketClaim phase=Ready")
 	return Proceed, nil
 }
 

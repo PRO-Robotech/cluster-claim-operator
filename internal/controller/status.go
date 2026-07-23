@@ -90,15 +90,6 @@ func (r *ClusterClaimReconciler) mirrorVaultSecretStatus(ctx context.Context, cl
 	claim.Status.VaultSecret = r.mirrorResourceStatus(ctx, VaultSecretClaimGVK, "VaultSecretClaim", claim.Name, claim.Namespace)
 }
 
-// mirrorS3BucketStatus mirrors S3BucketClaim phase and conditions into ClusterClaim.Status.S3Bucket.
-func (r *ClusterClaimReconciler) mirrorS3BucketStatus(ctx context.Context, claim *clusterclaimv1alpha1.ClusterClaim) {
-	if claim.Spec.S3BucketClaimTemplateRef == nil {
-		claim.Status.S3Bucket = nil
-		return
-	}
-	claim.Status.S3Bucket = r.mirrorResourceStatus(ctx, S3BucketClaimGVK, "S3BucketClaim", claim.Name, claim.Namespace)
-}
-
 // mirrorResourceStatus projects a resource's status.phase + status.conditions
 // into a VaultStatusSummary. Errors are logged but never stop the pipeline; a
 // missing resource yields a name-only summary.

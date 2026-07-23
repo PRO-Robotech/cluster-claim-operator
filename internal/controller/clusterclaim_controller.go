@@ -74,7 +74,6 @@ func (r *ClusterClaimReconciler) remoteNamespaceForClaim(claim *clusterclaimv1al
 // +kubebuilder:rbac:groups=controller.in-cloud.io,resources=ccmcsrcs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vault.in-cloud.io,resources=vaultclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vault.in-cloud.io,resources=vaultsecretclaims,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=vault.in-cloud.io,resources=s3bucketclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=clusterclaim.in-cloud.io,resources=clusterclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=clusterclaim.in-cloud.io,resources=clusterclaims/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=clusterclaim.in-cloud.io,resources=clusterclaims/finalizers,verbs=update
@@ -157,20 +156,6 @@ func (r *ClusterClaimReconciler) reconcileDelete(ctx context.Context, claim *clu
 			return ctrl.Result{}, err
 		}
 		deleted, err := r.deleteAndWait(ctx, VaultSecretClaimGVK, vscName, claim.Namespace)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		if !deleted {
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
-		}
-	}
-
-	if claim.Spec.S3BucketClaimTemplateRef != nil {
-		sbcName := naming.S3BucketClaimName(claim.Name)
-		if err := r.removeResourceFinalizer(ctx, S3BucketClaimGVK, sbcName, claim.Namespace); err != nil {
-			return ctrl.Result{}, err
-		}
-		deleted, err := r.deleteAndWait(ctx, S3BucketClaimGVK, sbcName, claim.Namespace)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -341,9 +326,6 @@ func (r *ClusterClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	vaultSecretClaimObj := &unstructured.Unstructured{}
 	vaultSecretClaimObj.SetGroupVersionKind(VaultSecretClaimGVK)
 
-	s3BucketClaimObj := &unstructured.Unstructured{}
-	s3BucketClaimObj.SetGroupVersionKind(S3BucketClaimGVK)
-
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&clusterclaimv1alpha1.ClusterClaim{},
 			builder.WithPredicates(predicate.Or(
@@ -356,7 +338,6 @@ func (r *ClusterClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(ccmObj).
 		Owns(vaultClaimObj).
 		Owns(vaultSecretClaimObj).
-		Owns(s3BucketClaimObj).
 		Watches(&clusterclaimv1alpha1.ClusterClaimObserveResourceTemplate{},
 			handler.EnqueueRequestsFromMapFunc(r.findClaimsForTemplate)).
 		Watches(&corev1.Secret{},

@@ -36,7 +36,6 @@ const (
 	indexConfigMapClientTemplateRef  = "spec.configMapTemplateRef.client.name"
 	indexVaultClaimTemplateRef       = "spec.vaultClaimTemplateRef.name"
 	indexVaultSecretClaimTemplateRef = "spec.vaultSecretClaimTemplateRef.name"
-	indexS3BucketClaimTemplateRef    = "spec.s3BucketClaimTemplateRef.name"
 )
 
 // allIndexFields returns the list of all templateRef index field names.
@@ -52,7 +51,6 @@ func allIndexFields() []string {
 		indexConfigMapClientTemplateRef,
 		indexVaultClaimTemplateRef,
 		indexVaultSecretClaimTemplateRef,
-		indexS3BucketClaimTemplateRef,
 	}
 }
 
@@ -152,16 +150,6 @@ func SetupIndexers(mgr ctrl.Manager) error {
 					return nil
 				}
 				return []string{claim.Spec.VaultSecretClaimTemplateRef.Name}
-			},
-		},
-		{
-			field: indexS3BucketClaimTemplateRef,
-			fn: func(obj client.Object) []string {
-				claim := obj.(*clusterclaimv1alpha1.ClusterClaim)
-				if claim.Spec.S3BucketClaimTemplateRef == nil {
-					return nil
-				}
-				return []string{claim.Spec.S3BucketClaimTemplateRef.Name}
 			},
 		},
 	}
