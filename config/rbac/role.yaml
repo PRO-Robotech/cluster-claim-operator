@@ -112,6 +112,7 @@ rules:
 - apiGroups:
   - vault.in-cloud.io
   resources:
+  - s3bucketclaims
   - vaultclaims
   - vaultsecretclaims
   verbs:
