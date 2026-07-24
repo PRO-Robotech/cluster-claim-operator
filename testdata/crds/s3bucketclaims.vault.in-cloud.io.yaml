@@ -1,0 +1,23 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: s3bucketclaims.vault.in-cloud.io
+spec:
+  group: vault.in-cloud.io
+  names:
+    kind: S3BucketClaim
+    listKind: S3BucketClaimList
+    plural: s3bucketclaims
+    singular: s3bucketclaim
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true

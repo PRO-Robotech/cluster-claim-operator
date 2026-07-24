@@ -74,6 +74,7 @@ func (r *ClusterClaimReconciler) remoteNamespaceForClaim(claim *clusterclaimv1al
 // +kubebuilder:rbac:groups=controller.in-cloud.io,resources=ccmcsrcs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vault.in-cloud.io,resources=vaultclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vault.in-cloud.io,resources=vaultsecretclaims,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=vault.in-cloud.io,resources=s3bucketclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=clusterclaim.in-cloud.io,resources=clusterclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=clusterclaim.in-cloud.io,resources=clusterclaims/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=clusterclaim.in-cloud.io,resources=clusterclaims/finalizers,verbs=update
@@ -135,27 +136,25 @@ func (r *ClusterClaimReconciler) reconcileDelete(ctx context.Context, claim *clu
 
 	r.event(claim, corev1.EventTypeNormal, "DeletingResources", "Starting deletion of managed resources")
 
-	// 0. VaultClaim — must go before Cluster[infra]; vault-operator needs the kubeconfig for cleanup.
-	if claim.Spec.VaultClaimTemplateRef != nil {
-		vcName := naming.VaultClaimName(claim.Name)
-		if err := r.removeResourceFinalizer(ctx, VaultClaimGVK, vcName, claim.Namespace); err != nil {
-			return ctrl.Result{}, err
-		}
-		deleted, err := r.deleteAndWait(ctx, VaultClaimGVK, vcName, claim.Namespace)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		if !deleted {
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
-		}
+	// 0. Vault-family claims — must go before Cluster[infra]; vault-operator
+	// needs the kubeconfig for cleanup.
+	type dependentClaim struct {
+		enabled bool
+		gvk     schema.GroupVersionKind
+		name    string
 	}
-
-	if claim.Spec.VaultSecretClaimTemplateRef != nil {
-		vscName := naming.VaultSecretClaimName(claim.Name)
-		if err := r.removeResourceFinalizer(ctx, VaultSecretClaimGVK, vscName, claim.Namespace); err != nil {
+	for _, dep := range []dependentClaim{
+		{claim.Spec.VaultClaimTemplateRef != nil, VaultClaimGVK, naming.VaultClaimName(claim.Name)},
+		{claim.Spec.VaultSecretClaimTemplateRef != nil, VaultSecretClaimGVK, naming.VaultSecretClaimName(claim.Name)},
+		{claim.Spec.S3BucketClaimTemplateRef != nil, S3BucketClaimGVK, naming.S3BucketClaimName(claim.Name)},
+	} {
+		if !dep.enabled {
+			continue
+		}
+		if err := r.removeResourceFinalizer(ctx, dep.gvk, dep.name, claim.Namespace); err != nil {
 			return ctrl.Result{}, err
 		}
-		deleted, err := r.deleteAndWait(ctx, VaultSecretClaimGVK, vscName, claim.Namespace)
+		deleted, err := r.deleteAndWait(ctx, dep.gvk, dep.name, claim.Namespace)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -326,6 +325,9 @@ func (r *ClusterClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	vaultSecretClaimObj := &unstructured.Unstructured{}
 	vaultSecretClaimObj.SetGroupVersionKind(VaultSecretClaimGVK)
 
+	s3BucketClaimObj := &unstructured.Unstructured{}
+	s3BucketClaimObj.SetGroupVersionKind(S3BucketClaimGVK)
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&clusterclaimv1alpha1.ClusterClaim{},
 			builder.WithPredicates(predicate.Or(
@@ -338,6 +340,7 @@ func (r *ClusterClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(ccmObj).
 		Owns(vaultClaimObj).
 		Owns(vaultSecretClaimObj).
+		Owns(s3BucketClaimObj).
 		Watches(&clusterclaimv1alpha1.ClusterClaimObserveResourceTemplate{},
 			handler.EnqueueRequestsFromMapFunc(r.findClaimsForTemplate)).
 		Watches(&corev1.Secret{},
