@@ -19,6 +19,7 @@ package controller
 import "k8s.io/apimachinery/pkg/runtime/schema"
 
 var (
+	AddonClaimGVK          = schema.GroupVersionKind{Group: "addons.in-cloud.io", Version: "v1alpha1", Kind: "AddonClaim"}
 	ApplicationGVK         = schema.GroupVersionKind{Group: "argoproj.io", Version: "v1alpha1", Kind: "Application"}
 	CertificateSetGVK      = schema.GroupVersionKind{Group: "in-cloud.io", Version: "v1alpha1", Kind: "CertificateSet"}
 	ClusterGVK             = schema.GroupVersionKind{Group: "cluster.x-k8s.io", Version: "v1beta2", Kind: "Cluster"}
@@ -28,3 +29,10 @@ var (
 	VaultSecretClaimGVK    = schema.GroupVersionKind{Group: "vault.in-cloud.io", Version: "v1alpha1", Kind: "VaultSecretClaim"}
 	S3BucketClaimGVK       = schema.GroupVersionKind{Group: "vault.in-cloud.io", Version: "v1alpha1", Kind: "S3BucketClaim"}
 )
+
+// controlPlaneGVKByKind resolves Cluster.spec.controlPlaneRef to a GVK. The reference carries
+// only apiGroup and kind, so the version comes from this registry.
+var controlPlaneGVKByKind = map[string]schema.GroupVersionKind{
+	KubeadmControlPlaneGVK.Kind: KubeadmControlPlaneGVK,
+	AddonClaimGVK.Kind:          AddonClaimGVK,
+}

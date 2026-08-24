@@ -166,21 +166,21 @@ func (r *ClusterClaimReconciler) syncClusterStatuses(ctx context.Context, claim 
 	}
 
 	if infraCluster != nil {
-		claim.Status.Clusters.Infra = &clusterclaimv1alpha1.InfraClusterStatusSummary{
-			ClusterStatusSummary: *extractClusterStatusSummary(ctx, infraCluster),
-			ControlPlaneVersion:  r.fetchControlPlaneVersion(ctx, infraCluster),
-		}
+		claim.Status.Clusters.Infra = extractClusterStatusSummary(ctx, infraCluster)
+		claim.Status.Clusters.Infra.ControlPlaneVersion = r.fetchControlPlaneVersion(ctx, infraCluster)
 		logger.V(1).Info("mirrored Cluster[infra] status", "phase", claim.Status.Clusters.Infra.Phase)
 	}
 	if clientCluster != nil {
 		claim.Status.Clusters.Client = extractClusterStatusSummary(ctx, clientCluster)
+		claim.Status.Clusters.Client.ControlPlaneVersion = r.fetchControlPlaneVersion(ctx, clientCluster)
 		logger.V(1).Info("mirrored Cluster[client] status", "phase", claim.Status.Clusters.Client.Phase)
 	}
 }
 
-// fetchControlPlaneVersion follows spec.controlPlaneRef from the infra CAPI Cluster to the
-// KubeadmControlPlane and extracts spec.version and status.version. Returns nil if the reference
-// is missing, the KCP cannot be fetched, or neither version is set.
+// fetchControlPlaneVersion follows spec.controlPlaneRef from a CAPI Cluster to its control plane
+// object and extracts spec.version and status.version, which the CAPI control plane contract
+// requires of every implementation. Returns nil if the reference is missing or of an unknown
+// kind, the object cannot be fetched, or neither version is set.
 func (r *ClusterClaimReconciler) fetchControlPlaneVersion(ctx context.Context, cluster *unstructured.Unstructured) *clusterclaimv1alpha1.ControlPlaneVersion {
 	logger := log.FromContext(ctx)
 	clusterName := cluster.GetName()
@@ -190,22 +190,29 @@ func (r *ClusterClaimReconciler) fetchControlPlaneVersion(ctx context.Context, c
 		return nil
 	}
 
+	cpRefKind, _, _ := unstructured.NestedString(cluster.Object, "spec", "controlPlaneRef", "kind")
+	gvk, known := controlPlaneGVKByKind[cpRefKind]
+	if !known {
+		logger.V(1).Info("unknown control plane kind, skipping version mirror", "cluster", clusterName, "kind", cpRefKind)
+		return nil
+	}
+
 	cpRefNamespace, _, _ := unstructured.NestedString(cluster.Object, "spec", "controlPlaneRef", "namespace")
 	if cpRefNamespace == "" {
 		cpRefNamespace = cluster.GetNamespace()
 	}
 
-	kcp := &unstructured.Unstructured{}
-	kcp.SetGroupVersionKind(KubeadmControlPlaneGVK)
-	if err := r.Get(ctx, client.ObjectKey{Name: cpRefName, Namespace: cpRefNamespace}, kcp); err != nil {
+	controlPlane := &unstructured.Unstructured{}
+	controlPlane.SetGroupVersionKind(gvk)
+	if err := r.Get(ctx, client.ObjectKey{Name: cpRefName, Namespace: cpRefNamespace}, controlPlane); err != nil {
 		if !apierrors.IsNotFound(err) {
-			logger.Error(err, "failed to fetch KubeadmControlPlane", "cluster", clusterName, "kcp", cpRefName)
+			logger.Error(err, "failed to fetch control plane object", "cluster", clusterName, "kind", cpRefKind, "name", cpRefName)
 		}
 		return nil
 	}
 
-	specVersion, _, _ := unstructured.NestedString(kcp.Object, "spec", "version")
-	statusVersion, _, _ := unstructured.NestedString(kcp.Object, "status", "version")
+	specVersion, _, _ := unstructured.NestedString(controlPlane.Object, "spec", "version")
+	statusVersion, _, _ := unstructured.NestedString(controlPlane.Object, "status", "version")
 	if specVersion == "" && statusVersion == "" {
 		return nil
 	}

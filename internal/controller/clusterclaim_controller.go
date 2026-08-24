@@ -71,6 +71,7 @@ func (r *ClusterClaimReconciler) remoteNamespaceForClaim(claim *clusterclaimv1al
 // +kubebuilder:rbac:groups=in-cloud.io,resources=certificatesets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=cluster.x-k8s.io,resources=clusters,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=controlplane.cluster.x-k8s.io,resources=kubeadmcontrolplanes,verbs=get;list;watch
+// +kubebuilder:rbac:groups=addons.in-cloud.io,resources=addonclaims,verbs=get;list;watch
 // +kubebuilder:rbac:groups=controller.in-cloud.io,resources=ccmcsrcs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vault.in-cloud.io,resources=vaultclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=vault.in-cloud.io,resources=vaultsecretclaims,verbs=get;list;watch;create;update;patch;delete
