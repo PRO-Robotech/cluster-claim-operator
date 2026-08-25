@@ -183,7 +183,9 @@ type ReplicaStatus struct {
 	UpToDateReplicas int32 `json:"upToDateReplicas,omitempty"`
 }
 
-// ControlPlaneVersion mirrors spec.version and status.version from a KubeadmControlPlane object.
+// ControlPlaneVersion mirrors spec.version and status.version from the object referenced by
+// Cluster.spec.controlPlaneRef: KubeadmControlPlane for infra clusters, AddonClaim for client
+// clusters whose control plane runs as an addon inside infra.
 // During a version upgrade SpecVersion is the desired version and StatusVersion is the currently observed version.
 type ControlPlaneVersion struct {
 	// +optional
@@ -208,12 +210,6 @@ type ClusterStatusSummary struct {
 	ControlPlane *ReplicaStatus `json:"controlPlane,omitempty"`
 	// +optional
 	Workers *ReplicaStatus `json:"workers,omitempty"`
-}
-
-// InfraClusterStatusSummary extends ClusterStatusSummary with fields that are specific
-// to infra clusters managed by KubeadmControlPlane.
-type InfraClusterStatusSummary struct {
-	ClusterStatusSummary `json:",inline"`
 	// +optional
 	ControlPlaneVersion *ControlPlaneVersion `json:"controlPlaneVersion,omitempty"`
 }
@@ -221,7 +217,7 @@ type InfraClusterStatusSummary struct {
 // ClustersStatus holds status summaries for infra and client clusters.
 type ClustersStatus struct {
 	// +optional
-	Infra *InfraClusterStatusSummary `json:"infra,omitempty"`
+	Infra *ClusterStatusSummary `json:"infra,omitempty"`
 	// +optional
 	Client *ClusterStatusSummary `json:"client,omitempty"`
 }

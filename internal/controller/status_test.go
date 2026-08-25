@@ -231,3 +231,121 @@ var _ = Describe("toInt32", func() {
 		Expect(toInt32("42")).To(Equal(int32(0)))
 	})
 })
+
+var _ = Describe("fetchControlPlaneVersion", func() {
+	var r *ClusterClaimReconciler
+
+	const testNamespace = "default"
+
+	BeforeEach(func() {
+		r = &ClusterClaimReconciler{Client: k8sClient}
+	})
+
+	// newClusterWithCPRef builds an unstructured CAPI Cluster carrying only the fields
+	// fetchControlPlaneVersion reads. The reference shape matches production: apiGroup and
+	// kind, no namespace and no version.
+	newClusterWithCPRef := func(name, apiGroup, kind, refName string) *unstructured.Unstructured {
+		return &unstructured.Unstructured{Object: map[string]interface{}{
+			"apiVersion": "cluster.x-k8s.io/v1beta2",
+			"kind":       "Cluster",
+			"metadata": map[string]interface{}{
+				"name":      name,
+				"namespace": testNamespace,
+			},
+			"spec": map[string]interface{}{
+				"controlPlaneRef": map[string]interface{}{
+					"apiGroup": apiGroup,
+					"kind":     kind,
+					"name":     refName,
+				},
+			},
+			"status": map[string]interface{}{"phase": "Provisioned"},
+		}}
+	}
+
+	createAddonClaim := func(name, specVersion, statusVersion string) {
+		claim := &unstructured.Unstructured{Object: map[string]interface{}{
+			"apiVersion": "addons.in-cloud.io/v1alpha1",
+			"kind":       "AddonClaim",
+			"metadata": map[string]interface{}{
+				"name":        name,
+				"namespace":   testNamespace,
+				"annotations": map[string]interface{}{"external-status/type": "controlplane"},
+			},
+			"spec": map[string]interface{}{
+				"addon":         map[string]interface{}{"name": "client-cp-control-plane"},
+				"templateRef":   map[string]interface{}{"name": "client-cp-template"},
+				"credentialRef": map[string]interface{}{"name": "infra-kubeconfig"},
+				"version":       specVersion,
+			},
+		}}
+		Expect(k8sClient.Create(ctx, claim)).To(Succeed())
+
+		if statusVersion != "" {
+			Expect(unstructured.SetNestedField(claim.Object, statusVersion, "status", "version")).To(Succeed())
+			Expect(k8sClient.Status().Update(ctx, claim)).To(Succeed())
+		}
+	}
+
+	It("should mirror the client control plane version from an AddonClaim", func() {
+		createAddonClaim("client-cp-mirrored", "v1.35.2", "v1.34.5")
+
+		claim := &clusterclaimv1alpha1.ClusterClaim{}
+		cluster := newClusterWithCPRef("mirrored-client", "addons.in-cloud.io", "AddonClaim", "client-cp-mirrored")
+
+		r.syncClusterStatuses(ctx, claim, nil, cluster)
+
+		Expect(claim.Status.Clusters.Client).NotTo(BeNil())
+		cpv := claim.Status.Clusters.Client.ControlPlaneVersion
+		Expect(cpv).NotTo(BeNil())
+		Expect(cpv.SpecVersion).To(Equal("v1.35.2"))
+		Expect(cpv.StatusVersion).To(Equal("v1.34.5"))
+	})
+
+	It("should report an unpublished status version as empty rather than dropping the mirror", func() {
+		createAddonClaim("client-cp-provisioning", "v1.35.2", "")
+
+		claim := &clusterclaimv1alpha1.ClusterClaim{}
+		cluster := newClusterWithCPRef("provisioning-client", "addons.in-cloud.io", "AddonClaim", "client-cp-provisioning")
+
+		r.syncClusterStatuses(ctx, claim, nil, cluster)
+
+		cpv := claim.Status.Clusters.Client.ControlPlaneVersion
+		Expect(cpv).NotTo(BeNil())
+		Expect(cpv.SpecVersion).To(Equal("v1.35.2"))
+		Expect(cpv.StatusVersion).To(BeEmpty())
+	})
+
+	It("should return nil for an unknown control plane kind", func() {
+		claim := &clusterclaimv1alpha1.ClusterClaim{}
+		cluster := newClusterWithCPRef("unknown-cp", "example.com", "SomeOtherControlPlane", "whatever")
+
+		r.syncClusterStatuses(ctx, claim, nil, cluster)
+
+		Expect(claim.Status.Clusters.Client).NotTo(BeNil())
+		Expect(claim.Status.Clusters.Client.ControlPlaneVersion).To(BeNil())
+	})
+
+	It("should return nil when the referenced control plane does not exist", func() {
+		claim := &clusterclaimv1alpha1.ClusterClaim{}
+		cluster := newClusterWithCPRef("missing-cp", "addons.in-cloud.io", "AddonClaim", "does-not-exist")
+
+		r.syncClusterStatuses(ctx, claim, nil, cluster)
+
+		Expect(claim.Status.Clusters.Client.ControlPlaneVersion).To(BeNil())
+	})
+
+	It("should return nil when the Cluster carries no controlPlaneRef", func() {
+		claim := &clusterclaimv1alpha1.ClusterClaim{}
+		cluster := &unstructured.Unstructured{Object: map[string]interface{}{
+			"apiVersion": "cluster.x-k8s.io/v1beta2",
+			"kind":       "Cluster",
+			"metadata":   map[string]interface{}{"name": "no-ref", "namespace": testNamespace},
+			"status":     map[string]interface{}{"phase": "Provisioned"},
+		}}
+
+		r.syncClusterStatuses(ctx, claim, nil, cluster)
+
+		Expect(claim.Status.Clusters.Client.ControlPlaneVersion).To(BeNil())
+	})
+})
