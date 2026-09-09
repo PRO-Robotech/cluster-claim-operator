@@ -44,6 +44,7 @@ const (
 	ConditionClientCPReady           = "ClientCPReady"
 	ConditionVaultClaimCreated       = "VaultClaimCreated"
 	ConditionVaultClaimReady         = "VaultClaimReady"
+	ConditionVaultKmsReady           = "VaultKmsReady"
 	ConditionVaultSecretClaimCreated = "VaultSecretClaimCreated"
 	ConditionVaultSecretClaimReady   = "VaultSecretClaimReady"
 	ConditionS3BucketClaimCreated    = "S3BucketClaimCreated"
@@ -183,9 +184,7 @@ type ReplicaStatus struct {
 	UpToDateReplicas int32 `json:"upToDateReplicas,omitempty"`
 }
 
-// ControlPlaneVersion mirrors spec.version and status.version from the object referenced by
-// Cluster.spec.controlPlaneRef: KubeadmControlPlane for infra clusters, AddonClaim for client
-// clusters whose control plane runs as an addon inside infra.
+// ControlPlaneVersion mirrors spec.version and status.version from the object referenced by Cluster.spec.controlPlaneRef.
 // During a version upgrade SpecVersion is the desired version and StatusVersion is the currently observed version.
 type ControlPlaneVersion struct {
 	// +optional

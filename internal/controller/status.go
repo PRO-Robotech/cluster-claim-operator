@@ -178,9 +178,8 @@ func (r *ClusterClaimReconciler) syncClusterStatuses(ctx context.Context, claim 
 }
 
 // fetchControlPlaneVersion follows spec.controlPlaneRef from a CAPI Cluster to its control plane
-// object and extracts spec.version and status.version, which the CAPI control plane contract
-// requires of every implementation. Returns nil if the reference is missing or of an unknown
-// kind, the object cannot be fetched, or neither version is set.
+// object and extracts spec.version and status.version. Returns nil if the reference is missing or
+// of an unknown kind, the object cannot be fetched, or neither version is set.
 func (r *ClusterClaimReconciler) fetchControlPlaneVersion(ctx context.Context, cluster *unstructured.Unstructured) *clusterclaimv1alpha1.ControlPlaneVersion {
 	logger := log.FromContext(ctx)
 	clusterName := cluster.GetName()
