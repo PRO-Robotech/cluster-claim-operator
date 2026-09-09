@@ -44,6 +44,7 @@ const (
 	ConditionClientCPReady           = "ClientCPReady"
 	ConditionVaultClaimCreated       = "VaultClaimCreated"
 	ConditionVaultClaimReady         = "VaultClaimReady"
+	ConditionVaultKmsReady           = "VaultKmsReady"
 	ConditionVaultSecretClaimCreated = "VaultSecretClaimCreated"
 	ConditionVaultSecretClaimReady   = "VaultSecretClaimReady"
 	ConditionS3BucketClaimCreated    = "S3BucketClaimCreated"

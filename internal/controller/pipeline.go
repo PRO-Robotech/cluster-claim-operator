@@ -60,6 +60,32 @@ type pipelineStep struct {
 	fn   func(context.Context, *clusterclaimv1alpha1.ClusterClaim, *renderer.TemplateContext) (StepResult, error)
 }
 
+// pipelineSteps is the ordered pipeline; a method so tests can assert the order.
+func (r *ClusterClaimReconciler) pipelineSteps() []pipelineStep {
+	return []pipelineStep{
+		{"Application", r.stepApplication},
+		{"EnsureS3BucketClaim", r.stepEnsureS3BucketClaim},
+		{"CertificateSetInfra", r.stepCertificateSetInfra},
+		{"WaitCertSetReady", r.stepWaitCertSetReady},
+		{"ClusterInfra", r.stepClusterInfra},
+		{"WaitInfraProvisioned", r.stepWaitInfraProvisioned},
+		{"CertificateSetClient", r.stepCertificateSetClient},
+		{"WaitInfraCPReady", r.stepWaitInfraCPReady},
+		{"EnsureVaultClaim", r.stepEnsureVaultClaim},
+		{"EnsureVaultSecretClaim", r.stepEnsureVaultSecretClaim},
+		{"CcmCsrc", r.stepCcmCsrc},
+		{"RemoteConfigMaps", r.stepRemoteConfigMaps},
+		// Must precede ClusterClient: an encrypted apiserver needs its key first.
+		{"WaitVaultKmsReady", r.stepWaitVaultKmsReady},
+		{"ClusterClient", r.stepClusterClient},
+		{"WaitClientCPReady", r.stepWaitClientCPReady},
+		{"CcmCsrcUpdate", r.stepCcmCsrcUpdate},
+		{"WaitVaultClaim", r.stepWaitVaultClaim},
+		{"WaitVaultSecretClaim", r.stepWaitVaultSecretClaim},
+		{"WaitS3BucketClaim", r.stepWaitS3BucketClaim},
+	}
+}
+
 // executePipeline runs the full pipeline of steps for a ClusterClaim.
 func (r *ClusterClaimReconciler) executePipeline(ctx context.Context, claim *clusterclaimv1alpha1.ClusterClaim) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -106,26 +132,7 @@ func (r *ClusterClaimReconciler) executePipeline(ctx context.Context, claim *clu
 	r.mirrorVaultSecretStatus(ctx, claim)
 	r.mirrorS3BucketStatus(ctx, claim)
 
-	steps := []pipelineStep{
-		{"Application", r.stepApplication},
-		{"EnsureS3BucketClaim", r.stepEnsureS3BucketClaim},
-		{"CertificateSetInfra", r.stepCertificateSetInfra},
-		{"WaitCertSetReady", r.stepWaitCertSetReady},
-		{"ClusterInfra", r.stepClusterInfra},
-		{"WaitInfraProvisioned", r.stepWaitInfraProvisioned},
-		{"CertificateSetClient", r.stepCertificateSetClient},
-		{"WaitInfraCPReady", r.stepWaitInfraCPReady},
-		{"EnsureVaultClaim", r.stepEnsureVaultClaim},
-		{"EnsureVaultSecretClaim", r.stepEnsureVaultSecretClaim},
-		{"CcmCsrc", r.stepCcmCsrc},
-		{"RemoteConfigMaps", r.stepRemoteConfigMaps},
-		{"ClusterClient", r.stepClusterClient},
-		{"WaitClientCPReady", r.stepWaitClientCPReady},
-		{"CcmCsrcUpdate", r.stepCcmCsrcUpdate},
-		{"WaitVaultClaim", r.stepWaitVaultClaim},
-		{"WaitVaultSecretClaim", r.stepWaitVaultSecretClaim},
-		{"WaitS3BucketClaim", r.stepWaitS3BucketClaim},
-	}
+	steps := r.pipelineSteps()
 
 	for _, s := range steps {
 		result, stepErr := s.fn(ctx, claim, &tmplCtx)
@@ -422,6 +429,71 @@ func (r *ClusterClaimReconciler) stepWaitVaultClaim(ctx context.Context, claim *
 	r.event(claim, corev1.EventTypeNormal, "VaultClaimReady", "VaultClaim %s is Ready", name)
 	setCondition(claim, clusterclaimv1alpha1.ConditionVaultClaimReady, metav1.ConditionTrue, "Ready", "VaultClaim phase=Ready")
 	return Proceed, nil
+}
+
+// stepWaitVaultKmsReady blocks the client cluster until its encryption keys
+// exist in Vault. Triggered by the rendered VaultClaim, not a feature flag.
+func (r *ClusterClaimReconciler) stepWaitVaultKmsReady(ctx context.Context, claim *clusterclaimv1alpha1.ClusterClaim, _ *renderer.TemplateContext) (StepResult, error) {
+	if claim.Spec.VaultClaimTemplateRef == nil {
+		return Proceed, nil
+	}
+	name := naming.VaultClaimName(claim.Name)
+	vc, err := r.getResource(ctx, VaultClaimGVK, name, claim.Namespace)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			// EnsureVaultClaim ran earlier this pass; the cache is catching up.
+			setWaiting(claim, clusterclaimv1alpha1.ConditionVaultKmsReady,
+				fmt.Sprintf("Waiting for VaultClaim %q to appear", name))
+			return Wait, nil
+		}
+		return Proceed, fmt.Errorf("get VaultClaim: %w", err)
+	}
+
+	keys, found, err := unstructured.NestedSlice(vc.Object, "spec", "transit", "keys")
+	if err != nil {
+		return Proceed, fmt.Errorf("read VaultClaim spec.transit.keys: %w", err)
+	}
+	if !found || len(keys) == 0 {
+		return Proceed, nil
+	}
+
+	// A key without a role is unreachable; a role without a key points at nothing.
+	if !hasTrueCondition(vc.Object, "TransitKeysReady") {
+		setWaiting(claim, clusterclaimv1alpha1.ConditionVaultKmsReady,
+			"Waiting for VaultClaim condition TransitKeysReady")
+		return Wait, nil
+	}
+	if !hasTrueCondition(vc.Object, "RolesApplied") {
+		setWaiting(claim, clusterclaimv1alpha1.ConditionVaultKmsReady,
+			"Waiting for VaultClaim condition RolesApplied")
+		return Wait, nil
+	}
+
+	r.event(claim, corev1.EventTypeNormal, "VaultKmsReady",
+		"VaultClaim %s has transit keys and roles ready; client control plane may start encrypted", name)
+	setCondition(claim, clusterclaimv1alpha1.ConditionVaultKmsReady, metav1.ConditionTrue, "Ready",
+		"Transit keys and roles applied in Vault")
+	return Proceed, nil
+}
+
+// hasTrueCondition reads a condition off an unstructured object.
+func hasTrueCondition(obj map[string]interface{}, condType string) bool {
+	conds, found, err := unstructured.NestedSlice(obj, "status", "conditions")
+	if err != nil || !found {
+		return false
+	}
+	for _, c := range conds {
+		m, ok := c.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if t, _, _ := unstructured.NestedString(m, "type"); t != condType {
+			continue
+		}
+		s, _, _ := unstructured.NestedString(m, "status")
+		return s == string(metav1.ConditionTrue)
+	}
+	return false
 }
 
 // stepEnsureVaultSecretClaim creates or updates the VaultSecretClaim (alongside
