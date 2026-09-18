@@ -1,3 +1,5 @@
+> Требования-истина по этой capability переехали в platform-specs: `openspec/specs/cluster-lifecycle/spec.md`. Этот документ — описание реализации и справочник.
+
 # ClusterClaim Operator — Техническое задание
 
 > `spec.vaultClaimTemplateRef`, два новых шага в pipeline (Step 8

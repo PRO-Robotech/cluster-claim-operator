@@ -30,8 +30,7 @@ var (
 	S3BucketClaimGVK       = schema.GroupVersionKind{Group: "vault.in-cloud.io", Version: "v1alpha1", Kind: "S3BucketClaim"}
 )
 
-// controlPlaneGVKByKind resolves Cluster.spec.controlPlaneRef to a GVK. The reference carries
-// only apiGroup and kind, so the version comes from this registry.
+// controlPlaneGVKByKind supplies the version that Cluster.spec.controlPlaneRef does not carry.
 var controlPlaneGVKByKind = map[string]schema.GroupVersionKind{
 	KubeadmControlPlaneGVK.Kind: KubeadmControlPlaneGVK,
 	AddonClaimGVK.Kind:          AddonClaimGVK,

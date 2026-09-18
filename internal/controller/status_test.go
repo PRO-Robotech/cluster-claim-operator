@@ -241,9 +241,7 @@ var _ = Describe("fetchControlPlaneVersion", func() {
 		r = &ClusterClaimReconciler{Client: k8sClient}
 	})
 
-	// newClusterWithCPRef builds an unstructured CAPI Cluster carrying only the fields
-	// fetchControlPlaneVersion reads. The reference shape matches production: apiGroup and
-	// kind, no namespace and no version.
+	// Reference shape matches production: apiGroup and kind, no namespace and no version.
 	newClusterWithCPRef := func(name, apiGroup, kind, refName string) *unstructured.Unstructured {
 		return &unstructured.Unstructured{Object: map[string]interface{}{
 			"apiVersion": "cluster.x-k8s.io/v1beta2",
