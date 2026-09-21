@@ -70,18 +70,10 @@ var _ = Describe("Manager", Ordered, func() {
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
 
-		By("installing external dependency CRDs (Application, CertificateSet, Cluster, CcmCsrc, VaultClaim)")
-		for _, crdFile := range []string{
-			"testdata/crds/applications.argoproj.io.yaml",
-			"testdata/crds/certificatesets.in-cloud.io.yaml",
-			"testdata/crds/clusters.cluster.x-k8s.io.yaml",
-			"testdata/crds/ccmcsrcs.controller.in-cloud.io.yaml",
-			"testdata/crds/vaultclaims.vault.in-cloud.io.yaml",
-		} {
-			cmd = exec.Command("kubectl", "apply", "-f", crdFile)
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to install external CRD: "+crdFile)
-		}
+		By("installing external dependency CRDs (same set envtest loads)")
+		cmd = exec.Command("kubectl", "apply", "-f", "testdata/crds/")
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to install external CRDs")
 
 		By("deploying the controller-manager")
 		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
