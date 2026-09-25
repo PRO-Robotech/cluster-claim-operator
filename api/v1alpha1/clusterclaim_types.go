@@ -120,6 +120,14 @@ type InfraSpec struct {
 
 	Network           NetworkConfig               `json:"network"`
 	ComponentVersions map[string]ComponentVersion `json:"componentVersions"`
+
+	// AddonVersions pins addon chart versions by Addon object name
+	// (e.g. "cilium", "cert-manager-csi-driver"). A key present here replaces
+	// the platform-version entry from cluster-claim-manifests values; absent
+	// keys fall back to it, then to the addonset release default.
+	// Rendered into parameters-infra as data.addonVersions.
+	// +optional
+	AddonVersions map[string]ComponentVersion `json:"addonVersions,omitempty"`
 }
 
 // ClientSpec defines the client cluster configuration.
