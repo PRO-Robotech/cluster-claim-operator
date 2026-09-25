@@ -217,6 +217,24 @@ spec:
               infra:
                 description: InfraSpec defines the infra cluster configuration.
                 properties:
+                  addonVersions:
+                    additionalProperties:
+                      description: ComponentVersion defines a version for a cluster
+                        component.
+                      properties:
+                        version:
+                          minLength: 1
+                          type: string
+                      required:
+                      - version
+                      type: object
+                    description: |-
+                      AddonVersions pins addon chart versions by Addon object name
+                      (e.g. "cilium", "cert-manager-csi-driver"). A key present here replaces
+                      the platform-version entry from cluster-claim-manifests values; absent
+                      keys fall back to it, then to the addonset release default.
+                      Rendered into parameters-infra as data.addonVersions.
+                    type: object
                   componentVersions:
                     additionalProperties:
                       description: ComponentVersion defines a version for a cluster

@@ -43,6 +43,7 @@ API Group: `clusterclaim.in-cloud.io/v1alpha1`
 | `paused` | `bool` | Да | Value для шаблонов (CAPI paused) |
 | `network` | `NetworkConfig` | Да | Сетевые настройки |
 | `componentVersions` | `map[string]ComponentVersion` | Да | Версии компонентов |
+| `addonVersions` | `map[string]ComponentVersion` | Нет | Версии чартов аддонов по имени объекта `Addon`; попадают в шаблон как `.ClusterClaim.spec.infra.addonVersions` |
 
 ### ClientSpec
 
