@@ -219,8 +219,8 @@ spec:
                 properties:
                   addonVersions:
                     additionalProperties:
-                      description: ComponentVersion defines a version for a cluster
-                        component.
+                      description: AddonVersions defines the chart version of one
+                        addon.
                       properties:
                         version:
                           minLength: 1

@@ -112,6 +112,12 @@ type ComponentVersion struct {
 	Version string `json:"version"`
 }
 
+// AddonVersions defines the chart version of one addon.
+type AddonVersions struct {
+	// +kubebuilder:validation:MinLength=1
+	Version string `json:"version"`
+}
+
 // InfraSpec defines the infra cluster configuration.
 type InfraSpec struct {
 	// +kubebuilder:validation:MinLength=1
@@ -127,7 +133,7 @@ type InfraSpec struct {
 	// keys fall back to it, then to the addonset release default.
 	// Rendered into parameters-infra as data.addonVersions.
 	// +optional
-	AddonVersions map[string]ComponentVersion `json:"addonVersions,omitempty"`
+	AddonVersions map[string]AddonVersions `json:"addonVersions,omitempty"`
 }
 
 // ClientSpec defines the client cluster configuration.
