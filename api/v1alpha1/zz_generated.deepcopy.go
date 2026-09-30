@@ -212,6 +212,7 @@ func (in *ClusterClaimSpec) DeepCopyInto(out *ClusterClaimSpec) {
 	in.CertificateSetTemplateRef.DeepCopyInto(&out.CertificateSetTemplateRef)
 	in.ClusterTemplateRef.DeepCopyInto(&out.ClusterTemplateRef)
 	out.CcmCsrTemplateRef = in.CcmCsrTemplateRef
+	in.ClusterClassTemplateRef.DeepCopyInto(&out.ClusterClassTemplateRef)
 	if in.ConfigMapTemplateRef != nil {
 		in, out := &in.ConfigMapTemplateRef, &out.ConfigMapTemplateRef
 		*out = new(DualTemplateRef)
