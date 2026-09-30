@@ -112,6 +112,12 @@ type ComponentVersion struct {
 	Version string `json:"version"`
 }
 
+// AddonVersions defines the chart version of one addon.
+type AddonVersions struct {
+	// +kubebuilder:validation:MinLength=1
+	Version string `json:"version"`
+}
+
 // InfraSpec defines the infra cluster configuration.
 type InfraSpec struct {
 	// +kubebuilder:validation:MinLength=1
@@ -120,6 +126,14 @@ type InfraSpec struct {
 
 	Network           NetworkConfig               `json:"network"`
 	ComponentVersions map[string]ComponentVersion `json:"componentVersions"`
+
+	// AddonVersions pins addon chart versions by Addon object name
+	// (e.g. "cilium", "cert-manager-csi-driver"). A key present here replaces
+	// the platform-version entry from cluster-claim-manifests values; absent
+	// keys fall back to it, then to the addonset release default.
+	// Rendered into parameters-infra as data.addonVersions.
+	// +optional
+	AddonVersions map[string]AddonVersions `json:"addonVersions,omitempty"`
 }
 
 // ClientSpec defines the client cluster configuration.
