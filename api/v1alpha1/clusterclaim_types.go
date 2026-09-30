@@ -156,6 +156,7 @@ type ClusterClaimSpec struct {
 	CertificateSetTemplateRef DualTemplateRef `json:"certificateSetTemplateRef"`
 	ClusterTemplateRef        DualTemplateRef `json:"clusterTemplateRef"`
 	CcmCsrTemplateRef         TemplateRef     `json:"ccmCsrTemplateRef"`
+	ClusterClassTemplateRef   DualTemplateRef `json:"clusterClassTemplateRef"`
 	// +optional
 	ConfigMapTemplateRef *DualTemplateRef `json:"configMapTemplateRef,omitempty"`
 

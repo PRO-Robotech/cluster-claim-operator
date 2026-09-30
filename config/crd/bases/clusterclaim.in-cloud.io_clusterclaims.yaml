@@ -139,6 +139,31 @@ spec:
                 required:
                 - enabled
                 type: object
+              clusterClassTemplateRef:
+                description: DualTemplateRef holds infra and optional client template
+                  references.
+                properties:
+                  client:
+                    description: TemplateRef is a reference to a cluster-scoped ClusterClaimObserveResourceTemplate.
+                    properties:
+                      name:
+                        minLength: 1
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  infra:
+                    description: TemplateRef is a reference to a cluster-scoped ClusterClaimObserveResourceTemplate.
+                    properties:
+                      name:
+                        minLength: 1
+                        type: string
+                    required:
+                    - name
+                    type: object
+                required:
+                - infra
+                type: object
               clusterTemplateRef:
                 description: DualTemplateRef holds infra and optional client template
                   references.
@@ -338,6 +363,7 @@ spec:
             - ccmCsrTemplateRef
             - certificateSetTemplateRef
             - client
+            - clusterClassTemplateRef
             - clusterTemplateRef
             - configuration
             - infra
