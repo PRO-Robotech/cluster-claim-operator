@@ -49,6 +49,7 @@ Steps 5-6:  .ClusterClaim + .InfraControlPlaneEndpoint
 Steps 7-8:  + .InfraControlPlaneInitialized + replica counts
 Steps 9:    все infra-поля доступны
 Steps 10-12: + .ClientControlPlaneInitialized + client endpoint
+Все шаги:   .S3Bucket (Name, Endpoint, Ready) — по мере заполнения статуса S3BucketClaim
 ```
 
 Подробности: [Template Context](../concepts/template.md#template-context).

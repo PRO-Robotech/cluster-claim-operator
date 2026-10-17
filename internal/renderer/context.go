@@ -26,6 +26,17 @@ type ControlPlaneEndpoint struct {
 	Port int64
 }
 
+// S3Bucket — бакет S3 заявки, как его видит статус S3BucketClaim.
+// Нулевое значение означает, что бакета нет или он ещё не заведён.
+type S3Bucket struct {
+	// Name — фактическое имя бакета из status.bucketName.
+	Name string
+	// Endpoint — адрес S3 из status.endpoint.
+	Endpoint string
+	// Ready — status.phase равен Ready.
+	Ready bool
+}
+
 // TemplateContext is passed to Go templates during rendering.
 type TemplateContext struct {
 	// ClusterClaim is the full unstructured representation of the ClusterClaim object.
@@ -42,6 +53,10 @@ type TemplateContext struct {
 	ClientControlPlaneInitialized       bool
 	ClientControlPlaneAvailableReplicas int32
 	ClientControlPlaneDesiredReplicas   int32
+
+	// S3Bucket заполняется из S3BucketClaim заявки; без неё поля пустые,
+	// поэтому {{ .S3Bucket.Name }} рендерится и тогда, когда бакета нет.
+	S3Bucket S3Bucket
 }
 
 // BuildContext creates a TemplateContext from unstructured resources.
@@ -88,4 +103,16 @@ func populateClusterFields(
 	desired, _, _ := unstructured.NestedInt64(cluster.Object, "status", "controlPlane", "desiredReplicas")
 	*availableReplicas = int32(available)
 	*desiredReplicas = int32(desired)
+}
+
+// S3BucketFromClaim читает имя бакета, адрес и готовность из статуса
+// S3BucketClaim. nil и пустой статус дают нулевое значение.
+func S3BucketFromClaim(sbc *unstructured.Unstructured) S3Bucket {
+	if sbc == nil {
+		return S3Bucket{}
+	}
+	name, _, _ := unstructured.NestedString(sbc.Object, "status", "bucketName")
+	endpoint, _, _ := unstructured.NestedString(sbc.Object, "status", "endpoint")
+	phase, _, _ := unstructured.NestedString(sbc.Object, "status", "phase")
+	return S3Bucket{Name: name, Endpoint: endpoint, Ready: phase == "Ready"}
 }

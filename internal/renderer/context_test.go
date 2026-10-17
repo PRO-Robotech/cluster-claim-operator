@@ -198,3 +198,68 @@ func TestBuildContext_MissingStatusFields(t *testing.T) {
 	assert.Equal(t, int32(0), ctx.InfraControlPlaneAvailableReplicas)
 	assert.Equal(t, int32(0), ctx.InfraControlPlaneDesiredReplicas)
 }
+
+func newTestS3BucketClaim(status map[string]interface{}) *unstructured.Unstructured {
+	obj := map[string]interface{}{
+		"apiVersion": "vault.in-cloud.io/v1alpha1",
+		"kind":       "S3BucketClaim",
+		"metadata": map[string]interface{}{
+			"name":      "test-claim",
+			"namespace": "test-ns",
+		},
+		"spec": map[string]interface{}{},
+	}
+	if status != nil {
+		obj["status"] = status
+	}
+	return &unstructured.Unstructured{Object: obj}
+}
+
+func TestBuildContext_S3BucketEmptyByDefault(t *testing.T) {
+	ctx := BuildContext(newTestClaim(), nil, nil)
+	assert.Equal(t, S3Bucket{}, ctx.S3Bucket)
+}
+
+func TestS3BucketFromClaim(t *testing.T) {
+	cases := []struct {
+		name string
+		sbc  *unstructured.Unstructured
+		want S3Bucket
+	}{
+		{name: "no S3BucketClaim", sbc: nil, want: S3Bucket{}},
+		{name: "no status", sbc: newTestS3BucketClaim(nil), want: S3Bucket{}},
+		{name: "empty status", sbc: newTestS3BucketClaim(map[string]interface{}{}), want: S3Bucket{}},
+		{
+			// Имя бакета появляется раньше endpoint: endpoint пишется вместе с ключами.
+			name: "pending with bucket name only",
+			sbc: newTestS3BucketClaim(map[string]interface{}{
+				"phase":      "Pending",
+				"bucketName": "abc123-bucket",
+			}),
+			want: S3Bucket{Name: "abc123-bucket"},
+		},
+		{
+			name: "ready",
+			sbc: newTestS3BucketClaim(map[string]interface{}{
+				"phase":      "Ready",
+				"bucketName": "abc123-bucket",
+				"endpoint":   "s3.example.com",
+			}),
+			want: S3Bucket{Name: "abc123-bucket", Endpoint: "s3.example.com", Ready: true},
+		},
+		{
+			name: "failed keeps known values but is not ready",
+			sbc: newTestS3BucketClaim(map[string]interface{}{
+				"phase":      "Failed",
+				"bucketName": "abc123-bucket",
+				"endpoint":   "s3.example.com",
+			}),
+			want: S3Bucket{Name: "abc123-bucket", Endpoint: "s3.example.com"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, S3BucketFromClaim(tc.sbc))
+		})
+	}
+}

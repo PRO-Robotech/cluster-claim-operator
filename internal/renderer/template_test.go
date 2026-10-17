@@ -318,3 +318,33 @@ func TestToYaml_RemovesTrailingNewline(t *testing.T) {
 	assert.Equal(t, "hello", result)
 	assert.NotContains(t, result, "\n")
 }
+
+// Шаблон, ссылающийся на .S3Bucket, рендерится и без бакета: поля пустые,
+// missingkey=error на поля структуры не действует.
+func TestRender_S3Bucket(t *testing.T) {
+	tmpl := `data:
+  bucket: "{{ .S3Bucket.Name }}"
+  endpoint: "{{ .S3Bucket.Endpoint }}"
+  ready: "{{ .S3Bucket.Ready }}"
+{{- if .S3Bucket.Name }}
+  hasBucket: "yes"
+{{- end }}`
+
+	claim := &unstructured.Unstructured{Object: map[string]interface{}{
+		"metadata": map[string]interface{}{"name": "c1", "namespace": "ns1"},
+	}}
+
+	empty, err := Render(tmpl, BuildContext(claim, nil, nil))
+	require.NoError(t, err)
+	assert.Equal(t, map[string]interface{}{
+		"bucket": "", "endpoint": "", "ready": "false",
+	}, empty["data"])
+
+	ctx := BuildContext(claim, nil, nil)
+	ctx.S3Bucket = S3Bucket{Name: "c1-bucket", Endpoint: "s3.example.com", Ready: true}
+	filled, err := Render(tmpl, ctx)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]interface{}{
+		"bucket": "c1-bucket", "endpoint": "s3.example.com", "ready": "true", "hasBucket": "yes",
+	}, filled["data"])
+}

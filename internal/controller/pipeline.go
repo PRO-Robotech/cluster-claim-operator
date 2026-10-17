@@ -132,6 +132,17 @@ func (r *ClusterClaimReconciler) executePipeline(ctx context.Context, claim *clu
 	r.mirrorVaultSecretStatus(ctx, claim)
 	r.mirrorS3BucketStatus(ctx, claim)
 
+	// Ошибку чтения не превращаем в пустые поля: иначе удалённые ConfigMap
+	// перерисовались бы без бакета, который на самом деле есть.
+	s3Bucket, err := r.s3BucketForClaim(ctx, claim)
+	if err != nil {
+		logger.Info("failed to read S3BucketClaim for template context, will retry", "error", err)
+		setCondition(claim, clusterclaimv1alpha1.ConditionReady, metav1.ConditionFalse, "S3BucketClaimReadError", err.Error())
+		_ = r.updateStatusIfChanged(ctx, claim, oldStatus)
+		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+	}
+	tmplCtx.S3Bucket = s3Bucket
+
 	steps := r.pipelineSteps()
 
 	for _, s := range steps {
@@ -603,6 +614,23 @@ func (r *ClusterClaimReconciler) stepWaitS3BucketClaim(ctx context.Context, clai
 	r.event(claim, corev1.EventTypeNormal, "S3BucketClaimReady", "S3BucketClaim %s is Ready", name)
 	setCondition(claim, clusterclaimv1alpha1.ConditionS3BucketClaimReady, metav1.ConditionTrue, "Ready", "S3BucketClaim phase=Ready")
 	return Proceed, nil
+}
+
+// s3BucketForClaim возвращает бакет заявки для контекста рендера. Пустое
+// значение — если s3BucketClaimTemplateRef не задан или S3BucketClaim ещё нет.
+// Перерисовку при смене статуса даёт Owns(S3BucketClaim) в SetupWithManager.
+func (r *ClusterClaimReconciler) s3BucketForClaim(ctx context.Context, claim *clusterclaimv1alpha1.ClusterClaim) (renderer.S3Bucket, error) {
+	if claim.Spec.S3BucketClaimTemplateRef == nil {
+		return renderer.S3Bucket{}, nil
+	}
+	sbc, err := r.getResource(ctx, S3BucketClaimGVK, naming.S3BucketClaimName(claim.Name), claim.Namespace)
+	if apierrors.IsNotFound(err) {
+		return renderer.S3Bucket{}, nil
+	}
+	if err != nil {
+		return renderer.S3Bucket{}, err
+	}
+	return renderer.S3BucketFromClaim(sbc), nil
 }
 
 // stepCcmCsrc creates or updates the CcmCsrc resource.
