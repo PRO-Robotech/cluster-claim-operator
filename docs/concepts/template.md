@@ -47,6 +47,30 @@
 | `.InfraControlPlaneAvailableReplicas` | `int32` | Step 7+ | Доступные реплики CP [infra] |
 | `.InfraControlPlaneDesiredReplicas` | `int32` | Step 7+ | Желаемые реплики CP [infra] |
 | `.ClientControlPlaneInitialized` | `bool` | Step 11+ | CP [client] инициализирован |
+| `.S3Bucket.Name` | `string` | Все | Имя бакета из `S3BucketClaim.status.bucketName`; пусто без бакета |
+| `.S3Bucket.Endpoint` | `string` | Все | Адрес S3 из `S3BucketClaim.status.endpoint`; пусто без бакета |
+| `.S3Bucket.Ready` | `bool` | Все | `S3BucketClaim.status.phase` равен `Ready` |
+
+### Бакет S3 заявки
+
+Поля `.S3Bucket.*` заполняются из статуса S3BucketClaim заявки (имя S3BucketClaim
+совпадает с именем ClusterClaim), если задан `spec.s3BucketClaimTemplateRef`.
+Пока S3BucketClaim нет, у него пустой статус или ссылка не задана, поля пустые
+(`""`, `false`) и шаблон рендерится как прежде — ошибки рендера нет.
+
+Имя бакета появляется в статусе раньше адреса: адрес записывается вместе с
+ключами доступа, перед переходом в `Ready`. Оператор следит за статусом
+S3BucketClaim, и при каждом его изменении ресурсы и удалённые ConfigMap
+перерисовываются; если отрисованное не изменилось, ConfigMap не переписывается.
+
+```yaml
+data:
+  s3BucketName: "{{ .S3Bucket.Name }}"
+  s3Endpoint: "{{ .S3Bucket.Endpoint }}"
+{{- if .S3Bucket.Ready }}
+  s3Enabled: "true"
+{{- end }}
+```
 
 ### Доступ к полям ClusterClaim
 

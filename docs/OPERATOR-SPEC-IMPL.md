@@ -147,6 +147,9 @@ Namespaced ресурс с:
 | `.ClientControlPlaneEndpoint` | `{Host, Port}` | Step 11+ | Из `Cluster[client].spec.controlPlaneEndpoint` |
 | `.ClientControlPlaneAvailableReplicas` | `int32` | Step 11+ | Из `Cluster[client].status.controlPlane.availableReplicas` |
 | `.ClientControlPlaneDesiredReplicas` | `int32` | Step 11+ | Из `Cluster[client].status.controlPlane.desiredReplicas` |
+| `.S3Bucket.Name` | `string` | Все | Из `S3BucketClaim.status.bucketName`; пусто без S3BucketClaim |
+| `.S3Bucket.Endpoint` | `string` | Все | Из `S3BucketClaim.status.endpoint`; пусто без S3BucketClaim |
+| `.S3Bucket.Ready` | `bool` | Все | `S3BucketClaim.status.phase == Ready` |
 
 **Совпадает с ТЗ.**
 

@@ -161,6 +161,9 @@ Go-template для генерации Kubernetes-ресурсов.
 | `.ClientControlPlaneEndpoint.Port` | `int64` | Step 11+ | Порт CP endpoint client |
 | `.ClientControlPlaneAvailableReplicas` | `int32` | Step 11+ | Доступные реплики CP [client] |
 | `.ClientControlPlaneDesiredReplicas` | `int32` | Step 11+ | Желаемые реплики CP [client] |
+| `.S3Bucket.Name` | `string` | Все | Имя бакета из `S3BucketClaim.status.bucketName`; пусто без бакета |
+| `.S3Bucket.Endpoint` | `string` | Все | Адрес S3 из `S3BucketClaim.status.endpoint`; пусто без бакета |
+| `.S3Bucket.Ready` | `bool` | Все | `S3BucketClaim.status.phase` равен `Ready` |
 
 ### Template-функции
 
