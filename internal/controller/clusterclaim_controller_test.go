@@ -48,6 +48,9 @@ func newTestClusterClaim(name, namespace string) *clusterclaimv1alpha1.ClusterCl
 			ClusterTemplateRef: clusterclaimv1alpha1.DualTemplateRef{
 				Infra: clusterclaimv1alpha1.TemplateRef{Name: "v1.34.4"},
 			},
+			ClusterClassTemplateRef: clusterclaimv1alpha1.DualTemplateRef{
+				Infra: clusterclaimv1alpha1.TemplateRef{Name: "default-cluster-class"},
+			},
 			CcmCsrTemplateRef: clusterclaimv1alpha1.TemplateRef{Name: "default-ccm"},
 			Replicas:          1,
 			Configuration: clusterclaimv1alpha1.ConfigurationSpec{

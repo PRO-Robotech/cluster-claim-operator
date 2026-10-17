@@ -12,6 +12,9 @@ spec:
   clusterTemplateRef:
     infra:
       name: e2e-cluster-infra
+  clusterClassTemplateRef:
+    infra:
+      name: e2e-cluster-class-infra
   ccmCsrTemplateRef:
     name: e2e-ccm
   configMapTemplateRef:

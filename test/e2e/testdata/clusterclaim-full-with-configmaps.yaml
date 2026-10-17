@@ -16,6 +16,9 @@ spec:
       name: e2e-cluster-infra
     client:
       name: e2e-cluster-client
+  clusterClassTemplateRef:
+    infra:
+      name: e2e-cluster-class-infra
   ccmCsrTemplateRef:
     name: e2e-ccm
   configMapTemplateRef:
