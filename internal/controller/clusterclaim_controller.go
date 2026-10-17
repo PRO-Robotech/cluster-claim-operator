@@ -341,6 +341,8 @@ func (r *ClusterClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(ccmObj).
 		Owns(vaultClaimObj).
 		Owns(vaultSecretClaimObj).
+		// Без предиката намеренно: смена статуса S3BucketClaim (имя бакета,
+		// endpoint, phase) должна перерисовать удалённые ConfigMap.
 		Owns(s3BucketClaimObj).
 		Watches(&clusterclaimv1alpha1.ClusterClaimObserveResourceTemplate{},
 			handler.EnqueueRequestsFromMapFunc(r.findClaimsForTemplate)).

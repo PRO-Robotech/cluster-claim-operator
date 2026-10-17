@@ -18,6 +18,7 @@ package controller
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -28,6 +29,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	clusterclaimv1alpha1 "github.com/PRO-Robotech/cluster-claim-operator/api/v1alpha1"
@@ -68,6 +71,54 @@ func patchS3BucketClaimPhase(name, namespace, phase string) {
 	})
 	ExpectWithOffset(1, k8sClient.Status().Patch(ctx, sbc,
 		client.RawPatch(types.MergePatchType, patch))).To(Succeed())
+}
+
+func patchS3BucketClaimStatus(name, namespace string, status map[string]interface{}) {
+	sbc := &unstructured.Unstructured{}
+	sbc.SetGroupVersionKind(S3BucketClaimGVK)
+	ExpectWithOffset(1, k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, sbc)).To(Succeed())
+
+	patch, _ := json.Marshal(map[string]interface{}{"status": status})
+	ExpectWithOffset(1, k8sClient.Status().Patch(ctx, sbc,
+		client.RawPatch(types.MergePatchType, patch))).To(Succeed())
+}
+
+// createSelfKubeconfigSecret кладёт kubeconfig самого envtest под именем
+// kubeconfig infra-кластера заявки: «удалённые» ConfigMap пишутся в него же.
+func createSelfKubeconfigSecret(claimName, namespace string) {
+	server := cfg.Host
+	if !strings.HasPrefix(server, "https://") && !strings.HasPrefix(server, "http://") {
+		server = "https://" + server
+	}
+	kc := clientcmdapi.NewConfig()
+	kc.Clusters["envtest"] = &clientcmdapi.Cluster{Server: server, CertificateAuthorityData: cfg.CAData}
+	kc.AuthInfos["envtest"] = &clientcmdapi.AuthInfo{
+		ClientCertificateData: cfg.CertData,
+		ClientKeyData:         cfg.KeyData,
+		Token:                 cfg.BearerToken,
+	}
+	kc.Contexts["envtest"] = &clientcmdapi.Context{Cluster: "envtest", AuthInfo: "envtest"}
+	kc.CurrentContext = "envtest"
+	data, err := clientcmd.Write(*kc)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred())
+
+	ExpectWithOffset(1, k8sClient.Create(ctx, &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: claimName + "-infra-kubeconfig", Namespace: namespace},
+		Data:       map[string][]byte{"value": data},
+	})).To(Succeed())
+}
+
+func ensureS3ConfigMapTemplate() {
+	tmpl := newTestTemplate("s3-cm-infra", "v1", "ConfigMap", `
+data:
+  s3Bucket: "{{ .S3Bucket.Name }}"
+  s3Endpoint: "{{ .S3Bucket.Endpoint }}"
+  s3Ready: "{{ .S3Bucket.Ready }}"
+`)
+	existing := &clusterclaimv1alpha1.ClusterClaimObserveResourceTemplate{}
+	if err := k8sClient.Get(ctx, client.ObjectKey{Name: tmpl.Name}, existing); apierrors.IsNotFound(err) {
+		Expect(k8sClient.Create(ctx, tmpl)).To(Succeed())
+	}
 }
 
 var _ = Describe("ClusterClaim S3BucketClaim integration", func() {
@@ -149,6 +200,59 @@ var _ = Describe("ClusterClaim S3BucketClaim integration", func() {
 				g.Expect(fetched.Status.S3Bucket).NotTo(BeNil())
 				g.Expect(fetched.Status.S3Bucket.Ready).To(BeTrue())
 			}).WithTimeout(timeout).WithPolling(polling).Should(Succeed())
+		})
+
+		It("re-renders remote ConfigMaps from S3BucketClaim status changes", func() {
+			ensureS3ConfigMapTemplate()
+
+			claim := newTestClusterClaim("sbc-cm", ns.Name)
+			claim.Spec.S3BucketClaimTemplateRef = &clusterclaimv1alpha1.TemplateRef{Name: "default-s3-bucket"}
+			claim.Spec.ConfigMapTemplateRef = &clusterclaimv1alpha1.DualTemplateRef{
+				Infra: clusterclaimv1alpha1.TemplateRef{Name: "s3-cm-infra"},
+			}
+			claim.Spec.RemoteNamespace = ns.Name
+			createSelfKubeconfigSecret(claim.Name, ns.Name)
+			Expect(k8sClient.Create(ctx, claim)).To(Succeed())
+
+			driveInfraReady(claim.Name, ns.Name)
+
+			cmKey := types.NamespacedName{Name: "parameters-infra", Namespace: ns.Name}
+			expectData := func(bucket, endpoint, ready string) {
+				EventuallyWithOffset(1, func(g Gomega) {
+					cm := &corev1.ConfigMap{}
+					g.Expect(k8sClient.Get(ctx, cmKey, cm)).To(Succeed())
+					g.Expect(cm.Data).To(HaveKeyWithValue("s3Bucket", bucket))
+					g.Expect(cm.Data).To(HaveKeyWithValue("s3Endpoint", endpoint))
+					g.Expect(cm.Data).To(HaveKeyWithValue("s3Ready", ready))
+				}).WithTimeout(timeout).WithPolling(polling).Should(Succeed())
+			}
+
+			// Бакета ещё нет — рендер проходит с пустыми полями.
+			expectData("", "", "false")
+
+			// Шаг ожидания бакета держит конвейер с RequeueAfter в минуты, поэтому
+			// перерисовку за секунды даёт только watch на статус S3BucketClaim.
+			patchS3BucketClaimStatus(claim.Name, ns.Name, map[string]interface{}{
+				"phase":      "Pending",
+				"bucketName": "sbc-cm-bucket",
+			})
+			expectData("sbc-cm-bucket", "", "false")
+
+			patchS3BucketClaimStatus(claim.Name, ns.Name, map[string]interface{}{
+				"phase":    clusterclaimv1alpha1.PhaseReady,
+				"endpoint": "s3.example.com",
+			})
+			expectData("sbc-cm-bucket", "s3.example.com", "true")
+
+			// Сошлось — ConfigMap больше не переписывается.
+			cm := &corev1.ConfigMap{}
+			Expect(k8sClient.Get(ctx, cmKey, cm)).To(Succeed())
+			rv := cm.ResourceVersion
+			Consistently(func(g Gomega) {
+				cur := &corev1.ConfigMap{}
+				g.Expect(k8sClient.Get(ctx, cmKey, cur)).To(Succeed())
+				g.Expect(cur.ResourceVersion).To(Equal(rv))
+			}).WithTimeout(3 * time.Second).WithPolling(polling).Should(Succeed())
 		})
 
 		It("deletes the S3BucketClaim during claim deletion", func() {
